@@ -12,6 +12,7 @@
 // Where's the makefile? Oh, you gotta be kidding me.
 // gcc -std=gnu99 -Wall -O3 solver.c -o solver; solver 4 3
 
+
 #define TARGET_SCORE (126)
 #define PRISONER_VALUE (2)
 
@@ -53,15 +54,70 @@ size_t to_key_s(state *base_state, state *s) {
     return key;
 }
 
+
+node_value negamax_node(
+        dict *d, lin_dict *ko_ld,
+        node_value *base_nodes, node_value *ko_nodes, value_t *leaf_nodes,
+        state *base_state, state *s, size_t key, int japanese_rules, int depth
+    ) {
+    if (target_dead(s)) {
+        value_t score = -TARGET_SCORE;
+        return (node_value) {score, score, 0, 0};
+    }
+    else if (s->passes == 2) {
+        value_t score = leaf_nodes[key_index(d, key)];
+        return (node_value) {score, score, 0, 0};
+    }
+    else if (s->passes == 1) {
+        depth++;
+    }
+    if (depth == 0) {
+        if (s->ko) {
+            return ko_nodes[lin_key_index(ko_ld, key)];
+        }
+        else {
+            return base_nodes[key_index(d, key)];
+        }
+    }
+
+    state child_;
+    state *child = &child_;
+    node_value v = (node_value) {VALUE_MIN, VALUE_MIN, DISTANCE_MAX, 0};
+    for (int j = -1; j < STATE_SIZE; j++) {
+        *child = *s;
+        stones_t move;
+        if (j == -1){
+            move = 0;
+        }
+        else {
+            move = 1ULL << j;
+        }
+        if (make_move(child, move)) {
+            size_t child_key = to_key_s(base_state, child);
+            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, japanese_rules, depth - 1);
+            if (japanese_rules) {
+                int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+                if (child_v.low > -TARGET_SCORE) {
+                    child_v.low = child_v.low - prisoners;
+                }
+                if (child_v.high < TARGET_SCORE) {
+                    child_v.high = child_v.high - prisoners;
+                }
+            }
+            v = negamax(v, child_v);
+        }
+    }
+    return v;
+}
+
+
 void iterate(
         dict *d, lin_dict *ko_ld,
-        node_value *base_nodes, node_value *pass_nodes, node_value *ko_nodes, value_t *leaf_nodes,
+        node_value *base_nodes, node_value *ko_nodes, value_t *leaf_nodes,
         state *base_state, size_t key_min, int japanese_rules
     ) {
     state s_;
     state *s = &s_;
-    state child_;
-    state *child = &child_;
 
     size_t num_states = num_keys(d);
 
@@ -69,77 +125,25 @@ void iterate(
     while (changed) {
         changed = 0;
         size_t key = key_min;
-        for (size_t i = 0; i < 2 * num_states + ko_ld->num_keys; i++) {
-            if (i < 2 * num_states) {
+        for (size_t i = 0; i < num_states + ko_ld->num_keys; i++) {
+            if (i < num_states) {
                 assert(from_key_s(base_state, s, key));
-                if (i % 2 == 1) {
-                    s->passes = 1;
-                }
             }
             else {
-                key = ko_ld->keys[i - 2 * num_states];
+                key = ko_ld->keys[i - num_states];
                 assert(from_key_ko(base_state, s, key));
             }
-            node_value new_v = (node_value) {VALUE_MIN, VALUE_MIN, DISTANCE_MAX, 0};
-            for (int j = -1; j < STATE_SIZE; j++) {
-                size_t child_key;
-                node_value child_v;
-                *child = *s;
-                stones_t move;
-                if (j == -1){
-                    move = 0;
-                }
-                else {
-                    move = 1UL << j;
-                }
-                if (make_move(child, move)) {
-                    child_key = to_key_s(base_state, child);
-                    if (target_dead(child)) {
-                        value_t score = -TARGET_SCORE;
-                        child_v = (node_value) {score, score, 0, 0};
-                    }
-                    else if (child->passes == 2){
-                        value_t score = leaf_nodes[key_index(d, child_key)];
-                        child_v = (node_value) {score, score, 0, 0};
-                    }
-                    else if (child->passes == 1) {
-                        child_v = pass_nodes[key_index(d, child_key)];
-                    }
-                    else if (child->ko) {
-                        child_v = ko_nodes[lin_key_index(ko_ld, child_key)];
-                    }
-                    else {
-                        child_v = base_nodes[key_index(d, child_key)];
-                    }
-                    if (japanese_rules) {
-                        int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
-                        if (child_v.low > -TARGET_SCORE) {
-                            child_v.low = child_v.low - prisoners;
-                        }
-                        if (child_v.high < TARGET_SCORE) {
-                            child_v.high = child_v.high - prisoners;
-                        }
-                    }
-                    new_v = negamax(new_v, child_v);
-                }
-            }
-            assert(new_v.high_distance > 0);
-            if (i < 2 * num_states) {
-                if (i % 2 == 0) {
-                    assert(new_v.low >= base_nodes[i / 2].low);
-                    assert(new_v.high <= base_nodes[i / 2].high);
-                    changed = changed || !equal(base_nodes[i / 2], new_v);
-                    base_nodes[i / 2] = new_v;
-                }
-                else {
-                    changed = changed || !equal(pass_nodes[i / 2], new_v);
-                    pass_nodes[i / 2] = new_v;
-                    key = next_key(d, key);
-                }
+            node_value new_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, japanese_rules, 1);
+            if (i < num_states) {
+                assert(new_v.low >= base_nodes[i].low);
+                assert(new_v.high <= base_nodes[i].high);
+                changed = changed || !equal(base_nodes[i], new_v);
+                base_nodes[i] = new_v;
+                key = next_key(d, key);
             }
             else {
-                changed = changed || !equal(ko_nodes[i - 2 * num_states], new_v);
-                ko_nodes[i - 2 * num_states] = new_v;
+                changed = changed || !equal(ko_nodes[i - num_states], new_v);
+                ko_nodes[i - num_states] = new_v;
             }
         }
         print_node(base_nodes[0]);
@@ -206,6 +210,7 @@ void endstate(
 
 
 int main(int argc, char *argv[]) {
+    /*
     if (argc != 3) {
         printf("Usage: %s width height\n", argv[0]);
         return 0;
@@ -228,10 +233,18 @@ int main(int argc, char *argv[]) {
         printf("Height must be less than 6.\n");
         return 0;
     }
+    */
+    int width = 3;
+    int height = 3;
+
+    #include "tsumego.c"
 
     state base_state_ = (state) {rectangle(width, height), 0, 0, 0, 0};
     state *base_state = &base_state_;
     base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
+
+    *base_state = *corner_six_1;
+
     print_state(base_state);
     state s_;
     state *s = &s_;
@@ -267,7 +280,6 @@ int main(int argc, char *argv[]) {
     printf("Total positions %zu\n", num_states);
 
     node_value *base_nodes = (node_value*) malloc(num_states * sizeof(node_value));
-    node_value *pass_nodes = (node_value*) malloc(num_states * sizeof(node_value));
     value_t *leaf_nodes = (value_t*) malloc(num_states * sizeof(value_t));
 
     lin_dict ko_ld_ = (lin_dict) {0, 0, 0, NULL};
@@ -281,7 +293,6 @@ int main(int argc, char *argv[]) {
         assert(from_key_s(base_state, s, key));
         value_t score = liberty_score(s);
         leaf_nodes[i] = score;
-        pass_nodes[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         base_nodes[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         for (int j = 0; j < STATE_SIZE; j++) {
             *child = *s;
@@ -308,7 +319,7 @@ int main(int argc, char *argv[]) {
     printf("Negamax with Chinese rules.\n");
     iterate(
         d, ko_ld,
-        base_nodes, pass_nodes, ko_nodes, leaf_nodes,
+        base_nodes, ko_nodes, leaf_nodes,
         base_state, key_min, 0
     );
     #endif
