@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -21,9 +22,12 @@ int sign(int x) {
 }
 
 int from_key_s(state *base_state, state *s, size_t key, size_t layer) {
+    *s = *base_state;
+    stones_t fixed = base_state->target | base_state->immortal;
+    s->player &= fixed;
+    s->opponent &= fixed;
+    s->ko_threats -= sign(s->ko_threats) * layer;
     if (key % 2) {
-        *s = *base_state;
-        s->ko_threats -= sign(s->ko_threats) * layer;
         stones_t temp = s->player;
         s->player = s->opponent;
         s->opponent = temp;
@@ -31,8 +35,6 @@ int from_key_s(state *base_state, state *s, size_t key, size_t layer) {
         return from_key(s, key / 2);
     }
     else {
-        *s = *base_state;
-        s->ko_threats -= sign(s->ko_threats) * layer;
         return from_key(s, key / 2);
     }
 }
@@ -71,15 +73,21 @@ size_t to_key_s(state *base_state, state *s, size_t *layer) {
 node_value negamax_node(
         dict *d, lin_dict *ko_ld,
         node_value **base_nodes, node_value **ko_nodes, value_t *leaf_nodes,
-        state *base_state, state *s, size_t key, size_t layer, int japanese_rules, int depth
+        state *base_state, state *s, size_t key, size_t layer, int liberty_leaf, int japanese_rules, int depth
     ) {
     if (target_dead(s)) {
         value_t score = -TARGET_SCORE;
         return (node_value) {score, score, 0, 0};
     }
     else if (s->passes == 2) {
-        value_t score = leaf_nodes[key_index(d, key)];
-        return (node_value) {score, score, 0, 0};
+        if (liberty_leaf) {
+            value_t score = liberty_score(s);
+            return (node_value) {score, score, 0, 0};
+        }
+        else {
+            value_t score = leaf_nodes[key_index(d, key)];
+            return (node_value) {score, score, 0, 0};
+        }
     }
     else if (s->passes == 1) {
         depth++;
@@ -108,7 +116,7 @@ node_value negamax_node(
         if (make_move(child, move)) {
             size_t child_layer;
             size_t child_key = to_key_s(base_state, child, &child_layer);
-            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, japanese_rules, depth - 1);
+            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, liberty_leaf, japanese_rules, depth - 1);
             if (japanese_rules) {
                 int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
                 if (child_v.low > -TARGET_SCORE) {
@@ -148,7 +156,7 @@ void iterate(
                     key = ko_ld->keys[i - num_states];
                     assert(from_key_ko(base_state, s, key, j));
                 }
-                node_value new_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, j, japanese_rules, 1);
+                node_value new_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, j, 0, japanese_rules, 1);
                 if (i < num_states) {
                     assert(new_v.low >= base_nodes[j][i].low);
                     assert(new_v.high <= base_nodes[j][i].high);
@@ -162,15 +170,16 @@ void iterate(
                 }
             }
         }
-        print_node(base_nodes[0][0]);
+        size_t base_layer;
+        size_t base_key = to_key_s(base_state, base_state, &base_layer);
+        print_node(negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, base_state, base_key, base_layer, 0, japanese_rules, 0));
     }
 }
 
-/*
 void endstate(
         dict *d, lin_dict *ko_ld,
-        node_value *base_nodes, node_value *pass_nodes, node_value *ko_nodes,
-        state *s, node_value parent_v, int turn, int low_player
+        node_value **base_nodes, node_value **ko_nodes,
+        state *base_state, state *s, node_value parent_v, int turn, int low_player
     ) {
     if (s->passes == 2) {
         if (turn) {
@@ -191,39 +200,23 @@ void endstate(
         else {
             move = 1UL << j;
         }
-        node_value child_v;
         if (make_move(child, move)) {
-            canonize(child);
-            size_t child_key = to_key(child);
-            if (child->passes == 2){
-                value_t score = liberty_score(child);
-                child_v = (node_value) {score, score, 0, 0};
-            }
-            else if (child->passes == 1) {
-                child_v = pass_nodes[key_index(d, child_key)];
-            }
-            else if (child->ko) {
-                child_key = child_key * STATE_SIZE + bitscan(child->ko);
-                child_v = ko_nodes[lin_key_index(ko_ld, child_key)];
-            }
-            else {
-                child_v = base_nodes[key_index(d, child_key)];
-            }
+            size_t child_layer;
+            size_t child_key = to_key_s(base_state, child, &child_layer);
+            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, NULL, base_state, child, child_key, child_layer, 1, 0, 0);
             int is_best_child = (-child_v.high == parent_v.low && child_v.high_distance + 1 == parent_v.low_distance);
             is_best_child = low_player ? is_best_child : (-child_v.low == parent_v.high && child_v.low_distance + 1 == parent_v.high_distance);
             if (is_best_child) {
                 *s = *child;
                 endstate(
                     d, ko_ld,
-                    base_nodes, pass_nodes, ko_nodes,
-                    s, child_v, !turn, !low_player
+                    base_nodes, ko_nodes,
+                    base_state, s, child_v, !turn, !low_player
                 );
             }
         }
     }
 }
-*/
-
 
 int main(int argc, char *argv[]) {
     /*
@@ -259,7 +252,9 @@ int main(int argc, char *argv[]) {
     state *base_state = &base_state_;
     base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
-    *base_state = *bulky_ten;
+    // *base_state = *corner_six;
+    // *base_state = *bulky_ten;
+    *base_state = *cho4;
     // base_state->opponent = base_state->target |= 1ULL << 9;
     // base_state->ko_threats = 1;
     size_t num_layers = abs(base_state->ko_threats) + 1;
@@ -357,6 +352,94 @@ int main(int argc, char *argv[]) {
     );
     #endif
 
+    *s = *base_state;
+
+    char coord1;
+    int coord2;
+
+    int parity = 0;
+    while (1) {
+        size_t layer;
+        size_t key = to_key_s(base_state, s, &layer);
+        node_value v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, layer, 0, 0, 0);
+        if (parity) {
+            state ps_;
+            state *ps = &ps_;
+            *ps = *s;
+            ps->player = s->opponent;
+            ps->opponent = s->player;
+            ps->ko_threats = -s->ko_threats;
+            print_state(ps);
+            print_node((node_value){-v.high, -v.low, v.high_distance, v.low_distance});
+        }
+        else {
+            print_state(s);
+            print_node(v);
+        }
+        if (target_dead(s) || s->passes >= 2) {
+            break;
+        }
+        for (int j = -1; j < STATE_SIZE; j++) {
+            *child = *s;
+            stones_t move;
+            if (j == -1){
+                move = 0;
+            }
+            else {
+                move = 1UL << j;
+            }
+            char c1 = 'A' + (j % WIDTH);
+            char c2 = '0' + (j / WIDTH);
+            if (make_move(child, move)) {
+                size_t child_layer;
+                size_t child_key = to_key_s(base_state, child, &child_layer);
+                node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, 0, 0, 0);
+                if (move) {
+                    printf("%c%c", c1, c2);
+                }
+                else {
+                    printf("pass");
+                }
+                if (-child_v.high == v.low) {
+                    printf("-");
+                    if (child_v.high_distance + 1 == v.low_distance) {
+                        printf("L");
+                    }
+                    else {
+                        printf("l");
+                    }
+                }
+                if (-child_v.high == v.low) {
+                    printf("-");
+                    if (child_v.low_distance + 1 == v.high_distance) {
+                        printf("H");
+                    }
+                    else {
+                        printf("h");
+                    }
+                }
+                printf(" ");
+            }
+        }
+        printf("\n");
+        printf("Enter coordinates:\n");
+        assert(scanf("%c %d", &coord1, &coord2));
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF);
+        coord1 = tolower(coord1) - 'a';
+        stones_t move;
+        if (coord1 < 0 || coord1 >= WIDTH) {
+            // printf("%d, %d\n", coord1, coord2);
+            move = 0;
+        }
+        else {
+            move = 1ULL << (coord1 + V_SHIFT * coord2);
+        }
+        if (make_move(s, move)) {
+            parity = !parity;
+        }
+    }
+
     /*
     char dir_name[16];
     sprintf(dir_name, "%dx%d", width, height);
@@ -406,60 +489,84 @@ int main(int argc, char *argv[]) {
     fread((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
     fclose(f);
     #endif
+    */
 
+    /*
     // Japanese leaf state calculation.
+    size_t zero_layer = abs(base_state->ko_threats);
     state new_s_;
     state *new_s = &new_s_;
     key = key_min;
     for (size_t i = 0; i < num_states; i++) {
-        assert(from_key(s, key));
+        assert(from_key_s(base_state, s, key, zero_layer));
         stones_t empty = s->playing_area & ~(s->player | s->opponent);
 
         *new_s = *s;
         endstate(
             d, ko_ld,
-            base_nodes, pass_nodes, ko_nodes,
-            new_s, base_nodes[i], 0, 1
+            base_nodes, ko_nodes,
+            base_state, new_s, base_nodes[zero_layer][i], 0, 1
         );
+
+        int score;
 
         stones_t player_controlled = new_s->player | liberties(new_s->player, new_s->playing_area & ~new_s->opponent);
         stones_t opponent_controlled = new_s->opponent | liberties(new_s->opponent, new_s->playing_area & ~new_s->player);
-        value_t score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
-        score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
+        if (player_controlled & new_s->opponent & new_s->target) {
+            score = TARGET_SCORE;
+        }
+        else if (opponent_controlled & new_s->player & new_s->target) {
+            score = -TARGET_SCORE;
+        }
+        else {
+            score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
+            score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
+        }
         leaf_nodes[i] = score;
 
         *new_s = *s;
         endstate(
             d, ko_ld,
-            base_nodes, pass_nodes, ko_nodes,
-            new_s, base_nodes[i], 0, 0
+            base_nodes, ko_nodes,
+            base_state, new_s, base_nodes[zero_layer][i], 0, 0
         );
 
         player_controlled = new_s->player | liberties(new_s->player, new_s->playing_area & ~new_s->opponent);
         opponent_controlled = new_s->opponent | liberties(new_s->opponent, new_s->playing_area & ~new_s->player);
-        score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
-        score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
+        if (player_controlled & new_s->opponent & new_s->target) {
+            score = TARGET_SCORE;
+        }
+        else if (opponent_controlled & new_s->player & new_s->target) {
+            score = -TARGET_SCORE;
+        }
+        else {
+            score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
+            score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
+        }
         leaf_nodes[i] += score;
 
         key = next_key(d, key);
     }
 
     // Clear the rest of the tree.
-    for (size_t i = 0; i < num_states; i++) {
-        pass_nodes[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
-        base_nodes[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
-    }
-    for (size_t i = 0; i < ko_ld->num_keys; i++) {
-        ko_nodes[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+    for (size_t j = 0; j < num_layers; j++) {
+        for (size_t i = 0; i < num_states; i++) {
+            base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
+        for (size_t i = 0; i < ko_ld->num_keys; i++) {
+            ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
     }
 
     printf("Negamax with Japanese rules.\n");
     iterate(
-        d, ko_ld,
-        base_nodes, pass_nodes, ko_nodes, leaf_nodes,
-        s, key_min, 1
+        d, ko_ld, num_layers,
+        base_nodes, ko_nodes, leaf_nodes,
+        base_state, key_min, 1
     );
+    */
 
+    /*
     f = fopen("base_nodes_j.dat", "wb");
     fwrite((void*) base_nodes, sizeof(node_value), num_states, f);
     fclose(f);
@@ -472,7 +579,7 @@ int main(int argc, char *argv[]) {
     f = fopen("ko_nodes_j.dat", "wb");
     fwrite((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
     fclose(f);
+    */
 
     return 0;
-    */
 }

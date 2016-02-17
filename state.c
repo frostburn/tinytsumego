@@ -70,7 +70,14 @@ void print_state(state *s) {
             printf("%d", i / V_SHIFT);
         }
         stones_t p = (1ULL << i);
+        if (p & s->playing_area) {
+            printf("\x1b[0;30;43m");  // Yellow BG
+        }
+        else {
+            printf("\x1b[0m");
+        }
         if (p & s->player) {
+            printf("\x1b[30m");  // Black
             if (p & s->target) {
                 printf(" p");
             }
@@ -82,6 +89,7 @@ void print_state(state *s) {
             }
         }
         else if (p & s->opponent) {
+            printf("\x1b[37m");  // White
             if (p & s->target) {
                 printf(" o");
             }
@@ -93,16 +101,18 @@ void print_state(state *s) {
             }
         }
         else if (p & s->ko) {
+            printf("\x1b[35m");
             printf(" *");
         }
         else if (p & s->playing_area) {
+            printf("\x1b[35m");
             printf(" .");
         }
         else {
             printf("  ");
         }
         if (i % V_SHIFT == V_SHIFT - 1){
-            printf("\n");
+            printf("\x1b[0m\n");
         }
     }
     printf("passes = %d ko_threats = %d\n", s->passes, s->ko_threats);

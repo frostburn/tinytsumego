@@ -49,3 +49,35 @@ state bulky_ten_ = (state) {
 };
 state *bulky_ten = &bulky_ten_;
 bulky_ten->ko = 0;
+
+state cho1_4_ = (state) {
+    rectangle(8, 3),
+    rectangle(8, 3) ^ rectangle(7, 2) ^ (1ULL << 7) ^ (1ULL << (2 * V_SHIFT)),
+    south(east(rectangle(4, 1))),
+    0,
+    0,
+    0,
+    0,
+    0
+};
+state *cho1_4 = &cho1_4_;
+cho1_4->immortal = cho1_4->player;
+cho1_4->target = cho1_4->opponent;
+
+state cho1_ = cho1_4_;
+state *cho1 = &cho1_;
+cho1->opponent |= 1ULL << V_SHIFT;
+
+state cho2_ = cho1_;
+state *cho2 = &cho2_;
+cho2->player |= 1ULL << 1;
+cho2->opponent |= (1ULL << 7) | (3ULL << (5 + V_SHIFT));
+
+state cho3_ = cho1_;
+state *cho3 = &cho3_;
+cho3->player |= 3UL << 5;
+cho3->opponent |= 3UL << (5 + V_SHIFT);
+
+state cho4_ = cho1_4_;
+state *cho4 = &cho4_;
+cho4->opponent |= 3UL << (5 + V_SHIFT);
