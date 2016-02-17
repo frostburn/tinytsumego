@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
 
     // *base_state = *corner_six;
     // *base_state = *bulky_ten;
-    *base_state = *cho4;
+    *base_state = *cho3;
     // base_state->opponent = base_state->target |= 1ULL << 9;
     // base_state->ko_threats = 1;
     size_t num_layers = abs(base_state->ko_threats) + 1;

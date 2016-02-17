@@ -3,15 +3,15 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define WIDTH (8)
-#define HEIGTH (8)
-#define STATE_SIZE (64)
-#define H_SHIFT (1)
-#define V_SHIFT (8)
-#define D_SHIFT (7)
-#define NORTH_WALL (0xFFULL)
-#define WEST_WALL (0x101010101010101ULL)
-#define WEST_BLOCK (0x7F7F7F7F7F7F7F7FULL)
+#define WIDTH (9)
+#define HEIGHT (7)
+#define STATE_SIZE (WIDTH * HEIGHT)
+#define H_SHIFT (1ULL)
+#define V_SHIFT (WIDTH)
+#define D_SHIFT (WIDTH - 1ULL)
+#define NORTH_WALL ((1ULL << WIDTH) - 1ULL)
+#define WEST_WALL (0x40201008040201ULL)
+#define WEST_BLOCK (0X3FDFEFF7FBFDFEFF)
 
 #define THREE_SLICE (0x7ULL)
 #define FOUR_SLICE (0xFULL)
@@ -41,7 +41,7 @@ void print_stones(stones_t stones) {
         printf(" %c", 'A' + i);
     }
     printf("\n");
-    for (int i = 0; i < STATE_SIZE; i++) {
+    for (int i = 0; i < 64; i++) {
         if (i % V_SHIFT == 0) {
             printf("%d", i / V_SHIFT);
         }
@@ -49,7 +49,7 @@ void print_stones(stones_t stones) {
             printf(" @");
         }
         else {
-            printf("  ");
+            printf(" .");
         }
         if (i % V_SHIFT == V_SHIFT - 1){
             printf("\n");
@@ -151,7 +151,7 @@ void dimensions(stones_t stones, int *width, int *height) {
             break;
         }
     }
-    for (int i = HEIGTH - 1; i >= 0; i--) {
+    for (int i = HEIGHT - 1; i >= 0; i--) {
         if (stones & (NORTH_WALL << (i * V_SHIFT))) {
             *height = i + 1;
             break;
@@ -307,8 +307,23 @@ int is_legal(state *s) {
     stones_t player = s->player;
     stones_t opponent = s->opponent;
     for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGTH; j += 2) {
-            p = 257ULL << i;
+        for (int j = 0; j + 1 < HEIGHT; j += 2) {
+            p = (1ULL | (1ULL << V_SHIFT)) << i;
+            chain = flood(p, player);
+            player ^= chain;
+            if (chain && !liberties(chain, s->playing_area & ~s->opponent) && !(chain & s->immortal)) {
+                return 0;
+            }
+            chain = flood(p, opponent);
+            opponent ^= chain;
+            if (chain && !liberties(chain, s->playing_area & ~s->player) && !(chain & s->immortal)) {
+                return 0;
+            }
+        }
+    }
+    if (HEIGHT % 2) {
+        for (int i = 0; i < WIDTH ; i += 2) {
+            p = 3ULL << i;  // Assumes that end bits don't matter.
             chain = flood(p, player);
             player ^= chain;
             if (chain && !liberties(chain, s->playing_area & ~s->opponent) && !(chain & s->immortal)) {
@@ -375,7 +390,7 @@ static size_t SIX_KEYS[4096] = {0, 1, 3, 4, 9, 10, 12, 13, 27, 28, 30, 31, 36, 3
 size_t to_key(state *s) {
     if ((s->playing_area & NORTH_WALL) == FOUR_SLICE) {
         size_t key = 0;
-        for (int i = (HEIGTH - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
+        for (int i = (HEIGHT - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
             key *= 81;
             key += FOUR_KEYS[((s->player >> i) & FOUR_SLICE) | (((s->opponent >> i) & FOUR_SLICE) << 4)];
         }
@@ -383,7 +398,7 @@ size_t to_key(state *s) {
     }
     else if ((s->playing_area & NORTH_WALL) == FIVE_SLICE) {
         size_t key = 0;
-        for (int i = (HEIGTH - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
+        for (int i = (HEIGHT - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
             key *= 243;
             key += FIVE_KEYS[((s->player >> i) & FIVE_SLICE) | (((s->opponent >> i) & FIVE_SLICE) << 5)];
         }
@@ -391,7 +406,7 @@ size_t to_key(state *s) {
     }
     else if ((s->playing_area & NORTH_WALL) == NORTH_WALL) {
         size_t key = 0;
-        for (int i = (HEIGTH - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
+        for (int i = (HEIGHT - 1) * V_SHIFT; i >= 0; i -= V_SHIFT) {
             key *= 729;
             key += SIX_KEYS[((s->player >> i) & NORTH_WALL) | (((s->opponent >> i) & NORTH_WALL) << 6)];
         }
@@ -462,7 +477,7 @@ int main() {
     time_t t = time(0);
     srand(t);
     for (int i = 0; i < 3000; i++) {
-       if (make_move(s, 1ULL << (rand() % WIDTH + (rand() % HEIGTH) * V_SHIFT))) {
+       if (make_move(s, 1ULL << (rand() % WIDTH + (rand() % HEIGHT) * V_SHIFT))) {
             print_state(s);
             from_key(s, to_key(s));
             if (target_dead(s)) {
