@@ -308,7 +308,7 @@ int is_legal(state *s) {
     stones_t opponent = s->opponent;
     for (int i = 0; i < WIDTH; i++) {
         for (int j = 0; j + 1 < HEIGHT; j += 2) {
-            p = (1ULL | (1ULL << V_SHIFT)) << i;
+            p = (1ULL | (1ULL << V_SHIFT)) << (i + j * V_SHIFT);
             chain = flood(p, player);
             player ^= chain;
             if (chain && !liberties(chain, s->playing_area & ~s->opponent) && !(chain & s->immortal)) {
@@ -323,7 +323,7 @@ int is_legal(state *s) {
     }
     if (HEIGHT % 2) {
         for (int i = 0; i < WIDTH ; i += 2) {
-            p = 3ULL << i;  // Assumes that end bits don't matter.
+            p = 3ULL << (i + (HEIGHT - 1) * V_SHIFT);  // Assumes that end bits don't matter.
             chain = flood(p, player);
             player ^= chain;
             if (chain && !liberties(chain, s->playing_area & ~s->opponent) && !(chain & s->immortal)) {
@@ -339,6 +339,30 @@ int is_legal(state *s) {
     // Checking for ko legality omitted.
     return 1;
 }
+
+/*
+int is_legal(state *s) {
+    stones_t p;
+    stones_t chain;
+    stones_t player = s->player;
+    stones_t opponent = s->opponent;
+    for (int i = 0; i < STATE_SIZE; i++) {
+        p = 1ULL << i;
+        chain = flood(p, player);
+        player ^= chain;
+        if (chain && !liberties(chain, s->playing_area & ~s->opponent) && !(chain & s->immortal)) {
+            return 0;
+        }
+        chain = flood(p, opponent);
+        opponent ^= chain;
+        if (chain && !liberties(chain, s->playing_area & ~s->player) && !(chain & s->immortal)) {
+            return 0;
+        }
+    }
+    // Checking for ko legality omitted.
+    return 1;
+}
+*/
 
 int from_key(state *s, size_t key) {
     stones_t fixed = s->target | s->immortal;

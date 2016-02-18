@@ -53,7 +53,12 @@ int from_key_ko(state *base_state, state *s, size_t key, size_t layer) {
 size_t to_key_s(state *base_state, state *s, size_t *layer) {
     stones_t fixed = s->target | s->immortal;
     size_t parity = 0;
-    if (fixed & ((base_state->player ^ s->player) | (base_state->opponent ^ s->opponent))) {
+    if (fixed) {
+        if (fixed & ((base_state->player ^ s->player) | (base_state->opponent ^ s->opponent))) {
+            parity = 1;
+        }
+    }
+    else if (sign(s->ko_threats) != sign(base_state->ko_threats)) {
         parity = 1;
     }
     size_t key = 2 * to_key(s) + parity;
@@ -66,6 +71,7 @@ size_t to_key_s(state *base_state, state *s, size_t *layer) {
     else {
         *layer = abs(s->ko_threats - base_state->ko_threats);
     }
+    assert(*layer <= abs(base_state->ko_threats));
     return key;
 }
 
@@ -84,7 +90,7 @@ node_value negamax_node(
         if (leaf_rule == 2) {
             score = 0;
         }
-        if (leaf_rule == 1) {
+        else if (leaf_rule == 1) {
             score = liberty_score(s);
         }
         else {
@@ -184,7 +190,7 @@ void endstate(
         node_value **base_nodes, node_value **ko_nodes,
         state *base_state, state *s, node_value parent_v, int turn, int low_player
     ) {
-    if (s->passes == 2) {
+    if (s->passes == 2 || target_dead(s)) {
         if (turn) {
             stones_t temp = s->player;
             s->player = s->opponent;
@@ -201,14 +207,25 @@ void endstate(
             move = 0;
         }
         else {
-            move = 1UL << j;
+            move = 1ULL << j;
         }
         if (make_move(child, move)) {
             size_t child_layer;
             size_t child_key = to_key_s(base_state, child, &child_layer);
-            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, NULL, base_state, child, child_key, child_layer, 1, 0, 0);
-            int is_best_child = (-child_v.high == parent_v.low && child_v.high_distance + 1 == parent_v.low_distance);
-            is_best_child = low_player ? is_best_child : (-child_v.low == parent_v.high && child_v.low_distance + 1 == parent_v.high_distance);
+            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, NULL, base_state, child, child_key, child_layer, 2, 1, 0);
+            node_value child_v_p = child_v;
+            int japanese_rules = 1;
+            if (japanese_rules) {
+                int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+                if (child_v_p.low > -TARGET_SCORE && child_v_p.low < TARGET_SCORE) {
+                    child_v_p.low = child_v_p.low - prisoners;
+                }
+                if (child_v_p.high > -TARGET_SCORE && child_v_p.high < TARGET_SCORE) {
+                    child_v_p.high = child_v_p.high - prisoners;
+                }
+            }
+            int is_best_child = (-child_v_p.high == parent_v.low && child_v_p.high_distance + 1 == parent_v.low_distance);
+            is_best_child = low_player ? is_best_child : (-child_v_p.low == parent_v.high && child_v_p.low_distance + 1 == parent_v.high_distance);
             if (is_best_child) {
                 *s = *child;
                 endstate(
@@ -216,6 +233,7 @@ void endstate(
                     base_nodes, ko_nodes,
                     base_state, s, child_v, !turn, !low_player
                 );
+                return;
             }
         }
     }
@@ -246,17 +264,17 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     */
-    int width = 3;
+    int width = 4;
     int height = 3;
 
     #include "tsumego.c"
 
     state base_state_ = (state) {rectangle(width, height), 0, 0, 0, 0};
     state *base_state = &base_state_;
-    base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
+    // base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
-    // *base_state = *corner_six;
-    *base_state = *bulky_ten;
+    // *base_state = *corner_six_1;
+    // *base_state = *bulky_ten;
     // *base_state = *cho3;
     // base_state->opponent = base_state->target |= 1ULL << 9;
     // base_state->ko_threats = 1;
@@ -355,8 +373,78 @@ int main(int argc, char *argv[]) {
     );
     #endif
 
+    // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed the number of stones killed.
     printf("Negamax with capture rules.\n");
     int japanese_rules = 1;
+    iterate(
+        d, ko_ld, num_layers,
+        base_nodes, ko_nodes, leaf_nodes,
+        base_state, key_min, 1
+    );
+
+    // Japanese leaf state calculation.
+    size_t zero_layer = abs(base_state->ko_threats);
+    state new_s_;
+    state *new_s = &new_s_;
+    key = key_min;
+    for (size_t i = 0; i < num_states; i++) {
+        assert(from_key_s(base_state, s, key, zero_layer));
+
+        *new_s = *s;
+        endstate(
+            d, ko_ld,
+            base_nodes, ko_nodes,
+            base_state, new_s, base_nodes[zero_layer][i], 0, 1
+        );
+
+        stones_t player_alive = s->player & new_s->player;
+        stones_t opponent_alive = s->opponent & new_s->opponent;
+
+        stones_t player_territory = 0;
+        stones_t opponent_territory = 0;
+        stones_t player_region_space = s->playing_area & ~s->player;
+        stones_t opponent_region_space = s->playing_area & ~s->opponent;
+        for (int j = 0; j < STATE_SIZE; j++) {
+            stones_t p = 1ULL << j;
+            stones_t region = flood(p, player_region_space);
+            player_region_space ^= region;
+            if (!(region & opponent_alive)) {
+                player_territory |= region;
+            }
+            region = flood(p, opponent_region_space);
+            opponent_region_space ^= region;
+            if (!(region & player_alive)) {
+                opponent_territory |= region;
+            }
+        }
+
+        int score;
+        if (player_territory & s->target) {
+            score = TARGET_SCORE;
+        }
+        else if (opponent_territory & s->target) {
+            score = -TARGET_SCORE;
+        }
+        else {
+            score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
+        }
+
+        leaf_nodes[i] = score;
+
+        key = next_key(d, key);
+    }
+
+    // Clear the rest of the tree.
+    for (size_t j = 0; j < num_layers; j++) {
+        for (size_t i = 0; i < num_states; i++) {
+            base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
+        for (size_t i = 0; i < ko_ld->num_keys; i++) {
+            ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
+    }
+
+    printf("Negamax with Japanese rules.\n");
     iterate(
         d, ko_ld, num_layers,
         base_nodes, ko_nodes, leaf_nodes,
@@ -509,81 +597,6 @@ int main(int argc, char *argv[]) {
     fread((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
     fclose(f);
     #endif
-    */
-
-    /*
-    // Japanese leaf state calculation.
-    size_t zero_layer = abs(base_state->ko_threats);
-    state new_s_;
-    state *new_s = &new_s_;
-    key = key_min;
-    for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(base_state, s, key, zero_layer));
-        stones_t empty = s->playing_area & ~(s->player | s->opponent);
-
-        *new_s = *s;
-        endstate(
-            d, ko_ld,
-            base_nodes, ko_nodes,
-            base_state, new_s, base_nodes[zero_layer][i], 0, 1
-        );
-
-        int score;
-
-        stones_t player_controlled = new_s->player | liberties(new_s->player, new_s->playing_area & ~new_s->opponent);
-        stones_t opponent_controlled = new_s->opponent | liberties(new_s->opponent, new_s->playing_area & ~new_s->player);
-        if (player_controlled & new_s->opponent & new_s->target) {
-            score = TARGET_SCORE;
-        }
-        else if (opponent_controlled & new_s->player & new_s->target) {
-            score = -TARGET_SCORE;
-        }
-        else {
-            score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
-            score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
-        }
-        leaf_nodes[i] = score;
-
-        *new_s = *s;
-        endstate(
-            d, ko_ld,
-            base_nodes, ko_nodes,
-            base_state, new_s, base_nodes[zero_layer][i], 0, 0
-        );
-
-        player_controlled = new_s->player | liberties(new_s->player, new_s->playing_area & ~new_s->opponent);
-        opponent_controlled = new_s->opponent | liberties(new_s->opponent, new_s->playing_area & ~new_s->player);
-        if (player_controlled & new_s->opponent & new_s->target) {
-            score = TARGET_SCORE;
-        }
-        else if (opponent_controlled & new_s->player & new_s->target) {
-            score = -TARGET_SCORE;
-        }
-        else {
-            score = popcount(player_controlled & empty) - popcount(opponent_controlled & empty);
-            score += 2 * (popcount(player_controlled & s->opponent) - popcount(opponent_controlled & s->player));
-        }
-        leaf_nodes[i] += score;
-
-        key = next_key(d, key);
-    }
-
-    // Clear the rest of the tree.
-    for (size_t j = 0; j < num_layers; j++) {
-        for (size_t i = 0; i < num_states; i++) {
-            base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
-        }
-        for (size_t i = 0; i < ko_ld->num_keys; i++) {
-            ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
-        }
-    }
-
-    printf("Negamax with Japanese rules.\n");
-    iterate(
-        d, ko_ld, num_layers,
-        base_nodes, ko_nodes, leaf_nodes,
-        base_state, key_min, 1
-    );
     */
 
     /*
