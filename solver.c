@@ -15,7 +15,7 @@
 
 
 #define TARGET_SCORE (126)
-#define PRISONER_VALUE (2)
+#define PRISONER_VALUE (1)
 
 int sign(int x) {
     return (x > 0) - (x < 0);
@@ -73,21 +73,24 @@ size_t to_key_s(state *base_state, state *s, size_t *layer) {
 node_value negamax_node(
         dict *d, lin_dict *ko_ld,
         node_value **base_nodes, node_value **ko_nodes, value_t *leaf_nodes,
-        state *base_state, state *s, size_t key, size_t layer, int liberty_leaf, int japanese_rules, int depth
+        state *base_state, state *s, size_t key, size_t layer, int leaf_rule, int japanese_rules, int depth
     ) {
     if (target_dead(s)) {
         value_t score = -TARGET_SCORE;
         return (node_value) {score, score, 0, 0};
     }
     else if (s->passes == 2) {
-        if (liberty_leaf) {
-            value_t score = liberty_score(s);
-            return (node_value) {score, score, 0, 0};
+        value_t score;
+        if (leaf_rule == 2) {
+            score = 0;
+        }
+        if (leaf_rule == 1) {
+            score = liberty_score(s);
         }
         else {
-            value_t score = leaf_nodes[key_index(d, key)];
-            return (node_value) {score, score, 0, 0};
+            score = leaf_nodes[key_index(d, key)];
         }
+        return (node_value) {score, score, 0, 0};
     }
     else if (s->passes == 1) {
         depth++;
@@ -116,13 +119,13 @@ node_value negamax_node(
         if (make_move(child, move)) {
             size_t child_layer;
             size_t child_key = to_key_s(base_state, child, &child_layer);
-            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, liberty_leaf, japanese_rules, depth - 1);
+            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, leaf_rule, japanese_rules, depth - 1);
             if (japanese_rules) {
                 int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
-                if (child_v.low > -TARGET_SCORE) {
+                if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
                     child_v.low = child_v.low - prisoners;
                 }
-                if (child_v.high < TARGET_SCORE) {
+                if (child_v.high > -TARGET_SCORE && child_v.high < TARGET_SCORE) {
                     child_v.high = child_v.high - prisoners;
                 }
             }
@@ -253,8 +256,8 @@ int main(int argc, char *argv[]) {
     base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
     // *base_state = *corner_six;
-    // *base_state = *bulky_ten;
-    *base_state = *cho3;
+    *base_state = *bulky_ten;
+    // *base_state = *cho3;
     // base_state->opponent = base_state->target |= 1ULL << 9;
     // base_state->ko_threats = 1;
     size_t num_layers = abs(base_state->ko_threats) + 1;
@@ -309,7 +312,7 @@ int main(int argc, char *argv[]) {
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(base_state, s, key, 0));
         value_t score = liberty_score(s);
-        leaf_nodes[i] = score;
+        leaf_nodes[i] = score * 0;
         for (size_t k = 0; k < num_layers; k++) {
             (base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
@@ -343,7 +346,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    #ifndef PRELOAD
+    #ifdef CHINESE
     printf("Negamax with Chinese rules.\n");
     iterate(
         d, ko_ld, num_layers,
@@ -351,6 +354,14 @@ int main(int argc, char *argv[]) {
         base_state, key_min, 0
     );
     #endif
+
+    printf("Negamax with capture rules.\n");
+    int japanese_rules = 1;
+    iterate(
+        d, ko_ld, num_layers,
+        base_nodes, ko_nodes, leaf_nodes,
+        base_state, key_min, 1
+    );
 
     *s = *base_state;
 
@@ -361,7 +372,7 @@ int main(int argc, char *argv[]) {
     while (1) {
         size_t layer;
         size_t key = to_key_s(base_state, s, &layer);
-        node_value v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, layer, 0, 0, 0);
+        node_value v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, layer, 0, japanese_rules, 0);
         if (parity) {
             state ps_;
             state *ps = &ps_;
@@ -393,7 +404,16 @@ int main(int argc, char *argv[]) {
             if (make_move(child, move)) {
                 size_t child_layer;
                 size_t child_key = to_key_s(base_state, child, &child_layer);
-                node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, 0, 0, 0);
+                node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, 0, japanese_rules, 0);
+                if (japanese_rules) {
+                    int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+                    if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
+                        child_v.low = child_v.low - prisoners;
+                    }
+                    if (child_v.high > -TARGET_SCORE && child_v.high < TARGET_SCORE) {
+                        child_v.high = child_v.high - prisoners;
+                    }
+                }
                 if (move) {
                     printf("%c%c", c1, c2);
                 }
