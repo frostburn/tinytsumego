@@ -113,21 +113,16 @@ node_value negamax_node(
     state child_;
     state *child = &child_;
     node_value v = (node_value) {VALUE_MIN, VALUE_MIN, DISTANCE_MAX, 0};
-    for (int j = -1; j < STATE_SIZE; j++) {
+    int opponent_popcount = popcount(s->opponent);
+    for (int j = 0; j < s->num_moves; j++) {
         *child = *s;
-        stones_t move;
-        if (j == -1){
-            move = 0;
-        }
-        else {
-            move = 1ULL << j;
-        }
+        stones_t move = s->moves[j];
         if (make_move(child, move)) {
             size_t child_layer;
             size_t child_key = to_key_s(base_state, child, &child_layer);
             node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, leaf_rule, japanese_rules, depth - 1);
             if (japanese_rules) {
-                int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+                int prisoners = (opponent_popcount - popcount(child->player)) * PRISONER_VALUE;
                 if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
                     child_v.low = child_v.low - prisoners;
                 }
@@ -200,15 +195,9 @@ void endstate(
     }
     state child_;
     state *child = &child_;
-    for (int j = -1; j < STATE_SIZE; j++) {
+    for (int j = 0; j < s->num_moves; j++) {
         *child = *s;
-        stones_t move;
-        if (j == -1){
-            move = 0;
-        }
-        else {
-            move = 1ULL << j;
-        }
+        stones_t move = s->moves[j];
         if (make_move(child, move)) {
             size_t child_layer;
             size_t child_key = to_key_s(base_state, child, &child_layer);
@@ -264,7 +253,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     */
-    int width = 4;
+    int width = 3;
     int height = 3;
 
     #include "tsumego.c"
@@ -273,11 +262,14 @@ int main(int argc, char *argv[]) {
     state *base_state = &base_state_;
     // base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
-    // *base_state = *corner_six_1;
+    *base_state = *corner_six_2;
     // *base_state = *bulky_ten;
     // *base_state = *cho3;
     // base_state->opponent = base_state->target |= 1ULL << 9;
-    // base_state->ko_threats = 1;
+    base_state->ko_threats = 1;
+
+    init_state(base_state);
+
     size_t num_layers = abs(base_state->ko_threats) + 1;
 
     print_state(base_state);
@@ -402,8 +394,8 @@ int main(int argc, char *argv[]) {
 
         stones_t player_territory = 0;
         stones_t opponent_territory = 0;
-        stones_t player_region_space = s->playing_area & ~s->player;
-        stones_t opponent_region_space = s->playing_area & ~s->opponent;
+        stones_t player_region_space = s->playing_area & ~player_alive;
+        stones_t opponent_region_space = s->playing_area & ~opponent_alive;
         for (int j = 0; j < STATE_SIZE; j++) {
             stones_t p = 1ULL << j;
             stones_t region = flood(p, player_region_space);
