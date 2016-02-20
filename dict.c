@@ -5,11 +5,10 @@
 
 typedef unsigned long long slot_t;
 
-// TODO: Check that we're on a 64 bit machine.
-
 typedef struct dict
 {
     size_t num_slots;
+    size_t min_key;
     size_t max_key;
     slot_t *slots;
     size_t *checkpoints;
@@ -30,21 +29,27 @@ typedef struct vertex
     void *right;
 } vertex;
 
+size_t ceil_div(size_t x, size_t y) {
+    if (x == 0) {
+        return 0;
+    }
+    return 1 + ((x - 1) / y);
+}
+
 int popcountll(slot_t slot) {
     return __builtin_popcountll(slot);
 }
 
 void init_dict(dict *d, size_t max_key) {
-    size_t num_slots = max_key / 64;
-    num_slots += 1;  // FIXME
+    size_t num_slots = ceil_div(max_key, 64);
     d->slots = (slot_t*) calloc(num_slots, sizeof(slot_t));
     d->num_slots = num_slots;
-    d->max_key = max_key;
+    d->min_key = ~0ULL;
+    d->max_key = 0ULL;
 }
 
 void resize_dict(dict *d, size_t max_key) {
-    size_t num_slots = max_key / 64;
-    num_slots += 1; // FIXME
+    size_t num_slots = ceil_div(max_key, 64);
     d->slots = (slot_t*) realloc(d->slots, sizeof(slot_t) * num_slots);
     if (num_slots > d->num_slots) {
         memset(d->slots + d->num_slots, 0, (num_slots - d->num_slots) * sizeof(slot_t));
@@ -54,7 +59,8 @@ void resize_dict(dict *d, size_t max_key) {
 }
 
 void finalize_dict(dict *d) {
-    d->checkpoints = malloc(((d->num_slots / 16) + 1) * sizeof(size_t));  // FIXME
+    resize_dict(d, d->max_key);
+    d->checkpoints = malloc(ceil_div(d->num_slots, 16) * sizeof(size_t));
     size_t checkpoint = 0;
     for (size_t i = 0; i < d->num_slots; i++) {
         if (i % 16 == 0) {
@@ -68,6 +74,12 @@ void add_key(dict *d, size_t key) {
     slot_t bit = key % 64;
     key /= 64;
     d->slots[key] |= 1ULL << bit;
+    if (key < d->min_key) {
+        d->min_key = key;
+    }
+    if (key > d->max_key) {
+        d->max_key = key;
+    }
 }
 
 slot_t test_key(dict *d, size_t key) {
@@ -164,20 +176,23 @@ size_t lin_key_index(lin_dict *ld, size_t key) {
 }
 
 void finalize_lin_dict(lin_dict *ld) {
-    ld->keys = (size_t*) realloc(ld->keys, sizeof(size_t) * ld->num_keys);
     qsort((void*) ld->keys, ld->num_keys, sizeof(size_t), _compar);
-    ld->sorted_size = 0;
     size_t lag = 0;
+    if (!ld->num_keys) {
+        return;
+    }
     size_t last = ld->keys[0] + 1;
     for (size_t i = 0; i < ld->num_keys; i++) {
         if (last == ld->keys[i]) {
             lag++;
         }
         else {
-            ld->keys[i - lag] = ld->keys[i];
+            last = ld->keys[i - lag] = ld->keys[i];
         }
     }
-    ld->sorted_size = ld->num_keys - lag;
+    ld->num_keys -= lag;
+    ld->sorted_size = ld->num_keys;
+    ld->keys = (size_t*) realloc(ld->keys, sizeof(size_t) * ld->num_keys);
 }
 
 void* btree_get(vertex *root, int depth, size_t key) {

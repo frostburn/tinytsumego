@@ -13,88 +13,121 @@
 // Where's the makefile? Oh, you gotta be kidding me.
 // gcc -std=gnu99 -Wall -O3 solver.c -o solver; solver 4 3
 
-
 #define TARGET_SCORE (126)
 #define PRISONER_VALUE (1)
+
+enum rule {
+    precalculated,
+    liberty,
+    none
+};
+
+typedef struct solution {
+    state *base_state;
+    state_info *si;
+    dict *d;
+    lin_dict *ko_ld;
+    size_t num_layers;
+    node_value **base_nodes;
+    node_value **ko_nodes;
+    value_t *leaf_nodes;
+    enum rule leaf_rule;
+    int count_prisoners;
+} solution;
 
 int sign(int x) {
     return (x > 0) - (x < 0);
 }
 
-int from_key_s(state *base_state, state *s, size_t key, size_t layer) {
+int from_key_s(state *base_state, state_info *si, state *s, size_t key, size_t layer) {
     *s = *base_state;
     stones_t fixed = base_state->target | base_state->immortal;
     s->player &= fixed;
     s->opponent &= fixed;
     s->ko_threats -= sign(s->ko_threats) * layer;
-    if (key % 2) {
-        stones_t temp = s->player;
-        s->player = s->opponent;
-        s->opponent = temp;
-        s->ko_threats = -s->ko_threats;
-        return from_key(s, key / 2);
+
+    if (!si->symmetry) {
+        if (key % 2) {
+            stones_t temp = s->player;
+            s->player = s->opponent;
+            s->opponent = temp;
+            s->ko_threats = -s->ko_threats;
+            s->white_to_play = !s->white_to_play;
+        }
+        key /= 2;
     }
-    else {
-        return from_key(s, key / 2);
-    }
+    return from_key(s, si, key);
 }
 
-int from_key_ko(state *base_state, state *s, size_t key, size_t layer) {
-    size_t ko_pos = key % STATE_SIZE;
-    key /= STATE_SIZE;
-    int legal = from_key_s(base_state, s, key, layer);
-    s->ko = 1ULL << ko_pos;
+int from_key_ko(state *base_state, state_info *si, state *s, size_t key, size_t layer) {
+    size_t ko_index = key % si->size;
+    key /= si->size;
+    int legal = from_key_s(base_state, si, s, key, layer);
+    s->ko = si->moves[ko_index + 1];
     if (!legal || s->ko & (s->player | s->opponent)) {
         return 0;
     }
     return 1;
 }
 
-size_t to_key_s(state *base_state, state *s, size_t *layer) {
-    stones_t fixed = s->target | s->immortal;
-    size_t parity = 0;
-    if (fixed) {
-        if (fixed & ((base_state->player ^ s->player) | (base_state->opponent ^ s->opponent))) {
-            parity = 1;
+size_t to_key_s(state *base_state, state_info *si, state *s, size_t *layer) {
+    size_t key;
+    if (si->symmetry) {
+        *layer = abs(s->ko_threats - base_state->ko_threats);
+        state c_ = *s;
+        state *c = &c_;
+        canonize(c, si);
+        key = to_key(c, si);
+        if (c->ko) {
+            int i;
+            for (i = 0; i < si->size; i++) {
+                if (c->ko == si->moves[i + 1]) {
+                    break;
+                }
+            }
+            key = si->size * key + i;
         }
     }
-    else if (sign(s->ko_threats) != sign(base_state->ko_threats)) {
-        parity = 1;
-    }
-    size_t key = 2 * to_key(s) + parity;
-    if (s->ko) {
-        key = STATE_SIZE * key + bitscan(s->ko);
-    }
-    if (parity) {
-        *layer = abs(s->ko_threats + base_state->ko_threats);
-    }
     else {
-        *layer = abs(s->ko_threats - base_state->ko_threats);
+        key = 2 * to_key(s, si);
+        if (s->white_to_play != base_state->white_to_play) {
+            key += 1;
+            *layer = abs(s->ko_threats + base_state->ko_threats);
+        }
+        else {
+            *layer = abs(s->ko_threats - base_state->ko_threats);
+        }
+        if (s->ko) {
+            int i;
+            for (i = 0; i < si->size; i++) {
+                if (s->ko == si->moves[i + 1]) {
+                    break;
+                }
+            }
+            key = si->size * key + i;
+        }
     }
-    assert(*layer <= abs(base_state->ko_threats));
     return key;
 }
 
-
-node_value negamax_node(
-        dict *d, lin_dict *ko_ld,
-        node_value **base_nodes, node_value **ko_nodes, value_t *leaf_nodes,
-        state *base_state, state *s, size_t key, size_t layer, int leaf_rule, int japanese_rules, int depth
-    ) {
+node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int depth) {
     if (target_dead(s)) {
         value_t score = -TARGET_SCORE;
         return (node_value) {score, score, 0, 0};
     }
     else if (s->passes == 2) {
         value_t score;
-        if (leaf_rule == 2) {
+        if (sol->leaf_rule == none) {
             score = 0;
         }
-        else if (leaf_rule == 1) {
+        else if (sol->leaf_rule == liberty) {
             score = liberty_score(s);
         }
+        else if (sol->leaf_rule == precalculated) {
+            score = sol->leaf_nodes[key_index(sol->d, key)];
+        }
         else {
-            score = leaf_nodes[key_index(d, key)];
+            assert(0);
         }
         return (node_value) {score, score, 0, 0};
     }
@@ -103,26 +136,25 @@ node_value negamax_node(
     }
     if (depth == 0) {
         if (s->ko) {
-            return ko_nodes[layer][lin_key_index(ko_ld, key)];
+            return sol->ko_nodes[layer][lin_key_index(sol->ko_ld, key)];
         }
         else {
-            return base_nodes[layer][key_index(d, key)];
+            return sol->base_nodes[layer][key_index(sol->d, key)];
         }
     }
 
     state child_;
     state *child = &child_;
     node_value v = (node_value) {VALUE_MIN, VALUE_MIN, DISTANCE_MAX, 0};
-    int opponent_popcount = popcount(s->opponent);
-    for (int j = 0; j < s->num_moves; j++) {
+    for (int j = 0; j < sol->si->num_moves; j++) {
         *child = *s;
-        stones_t move = s->moves[j];
-        if (make_move(child, move)) {
+        stones_t move = sol->si->moves[j];
+        int prisoners;
+        if (make_move(child, move, &prisoners)) {
             size_t child_layer;
-            size_t child_key = to_key_s(base_state, child, &child_layer);
-            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, leaf_rule, japanese_rules, depth - 1);
-            if (japanese_rules) {
-                int prisoners = (opponent_popcount - popcount(child->player)) * PRISONER_VALUE;
+            size_t child_key = to_key_s(sol->base_state, sol->si, child, &child_layer);
+            node_value child_v = negamax_node(sol, child, child_key, child_layer, depth - 1);
+            if (sol->count_prisoners) {
                 if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
                     child_v.low = child_v.low - prisoners;
                 }
@@ -137,49 +169,46 @@ node_value negamax_node(
 }
 
 
-void iterate(
-        dict *d, lin_dict *ko_ld, size_t num_layers,
-        node_value **base_nodes, node_value **ko_nodes, value_t *leaf_nodes,
-        state *base_state, size_t key_min, int japanese_rules
-    ) {
+void iterate(solution *sol) {
     state s_;
     state *s = &s_;
 
-    size_t num_states = num_keys(d);
+    size_t num_states = num_keys(sol->d);
 
     int changed = 1;
     while (changed) {
         changed = 0;
-        for (size_t j = 0; j < num_layers; j++) {
-            size_t key = key_min;
-            for (size_t i = 0; i < num_states + ko_ld->num_keys; i++) {
+        for (size_t j = 0; j < sol->num_layers; j++) {
+            size_t key = sol->d->min_key;
+            for (size_t i = 0; i < num_states + sol->ko_ld->num_keys; i++) {
                 if (i < num_states) {
-                    assert(from_key_s(base_state, s, key, j));
+                    assert(from_key_s(sol->base_state, sol->si, s, key, j));
                 }
                 else {
-                    key = ko_ld->keys[i - num_states];
-                    assert(from_key_ko(base_state, s, key, j));
+                    key = sol->ko_ld->keys[i - num_states];
+                    assert(from_key_ko(sol->base_state, sol->si, s, key, j));
                 }
-                node_value new_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, j, 0, japanese_rules, 1);
+                node_value new_v = negamax_node(sol, s, key, j, 1);
                 if (i < num_states) {
-                    assert(new_v.low >= base_nodes[j][i].low);
-                    assert(new_v.high <= base_nodes[j][i].high);
-                    changed = changed || !equal(base_nodes[j][i], new_v);
-                    base_nodes[j][i] = new_v;
-                    key = next_key(d, key);
+                    assert(new_v.low >= sol->base_nodes[j][i].low);
+                    assert(new_v.high <= sol->base_nodes[j][i].high);
+                    changed = changed || !equal(sol->base_nodes[j][i], new_v);
+                    sol->base_nodes[j][i] = new_v;
+                    key = next_key(sol->d, key);
                 }
                 else {
-                    changed = changed || !equal(ko_nodes[j][i - num_states], new_v);
-                    ko_nodes[j][i - num_states] = new_v;
+                    changed = changed || !equal(sol->ko_nodes[j][i - num_states], new_v);
+                    sol->ko_nodes[j][i - num_states] = new_v;
                 }
             }
         }
         size_t base_layer;
-        size_t base_key = to_key_s(base_state, base_state, &base_layer);
-        print_node(negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, base_state, base_key, base_layer, 0, japanese_rules, 0));
+        size_t base_key = to_key_s(sol->base_state, sol->si, sol->base_state, &base_layer);
+        print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
     }
 }
 
+/*
 void endstate(
         dict *d, lin_dict *ko_ld,
         node_value **base_nodes, node_value **ko_nodes,
@@ -227,51 +256,70 @@ void endstate(
         }
     }
 }
+*/
 
 int main(int argc, char *argv[]) {
-    /*
-    if (argc != 3) {
-        printf("Usage: %s width height\n", argv[0]);
-        return 0;
+    int width = -1;
+    int height = -1;
+    int ko_threats = 0;
+    if (argc < 3) {
+        if (argc == 2) {
+            ko_threats = atoi(argv[1]);
+        }
+        printf("Using predifined tsumego");
     }
-    int width = atoi(argv[1]);
-    int height = atoi(argv[2]);
-    if (width <= 0) {
-        printf("Width must be larger than 0.\n");
-        return 0;
+    else {
+        if (argc == 4) {
+            ko_threats = atoi(argv[3]);
+        }
+        width = atoi(argv[1]);
+        height = atoi(argv[2]);
+        if (width <= 0) {
+            printf("Width must be larger than 0.\n");
+            return 0;
+        }
+        if (width >= 10) {
+            printf("Width must be less than 10.\n");
+            return 0;
+        }
+        if (height <= 0) {
+            printf("Height must be larger than 0.\n");
+            return 0;
+        }
+        if (height >= 8) {
+            printf("Height must be less than 8.\n");
+            return 0;
+        }
     }
-    if (width >= 7) {
-        printf("Width must be less than 7.\n");
-        return 0;
-    }
-    if (height <= 0) {
-        printf("Height must be larger than 0.\n");
-        return 0;
-    }
-    if (height >= 6) {
-        printf("Height must be less than 6.\n");
-        return 0;
-    }
-    */
-    int width = 3;
-    int height = 3;
 
     #include "tsumego.c"
 
-    state base_state_ = (state) {rectangle(width, height), 0, 0, 0, 0};
+    state base_state_;
     state *base_state = &base_state_;
-    // base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
-    // *base_state = *corner_six;
-    // *base_state = *bulky_ten;
-    // *base_state = *cho3;
-    *base_state = *cho534;
-    // base_state->opponent = base_state->target |= 1ULL << 9;
-    // base_state->ko_threats = 1;
+    if (width > 0) {
+        *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
+    }
+    else {
+        // *base_state = *corner_six_1;
+        *base_state = *bulky_ten;
+        // *base_state = *cho3;
+        // *base_state = *cho534;
+    }
+    base_state->ko_threats = ko_threats;
 
-    init_state(base_state);
 
-    size_t num_layers = abs(base_state->ko_threats) + 1;
+    state_info si_;
+    state_info *si = &si_;
+    init_state(base_state, si);
+
+    size_t num_layers;
+    if (si->symmetry) {
+        num_layers = 2 * abs(base_state->ko_threats) + 1;
+    }
+    else {
+        num_layers = abs(base_state->ko_threats) + 1;
+    }
 
     print_state(base_state);
     state s_;
@@ -280,23 +328,31 @@ int main(int argc, char *argv[]) {
     dict d_;
     dict *d = &d_;
 
-    size_t max_k = 2 * max_key(base_state);
+    solution sol_;
+    solution *sol = &sol_;
+    sol->base_state = base_state;
+    sol->si = si;
+    sol->d = d;
+    sol->num_layers = num_layers;
+
+    size_t max_k = max_key(base_state);
+    if (!si->symmetry) {
+        max_k *= 2;
+    }
     init_dict(d, max_k);
 
-    size_t key_min = ~0;
     size_t key_max = 0;
 
     size_t total_legal = 0;
     for (size_t k = 0; k < max_k; k++) {
-        if (!from_key_s(base_state, s, k, 0)){
+        if (!from_key_s(base_state, si, s, k, 0)){
             continue;
         }
         total_legal++;
-        size_t key = k;
+        size_t layer;
+        size_t key = to_key_s(base_state, si, s, &layer);
+        assert(layer == 0);
         add_key(d, key);
-        if (key < key_min) {
-            key_min = key;
-        }
         if (key > key_max) {
             key_max = key;
         }
@@ -305,7 +361,8 @@ int main(int argc, char *argv[]) {
     finalize_dict(d);
     size_t num_states = num_keys(d);
 
-    printf("Total positions %zu\n", num_states);
+    printf("Total positions %zu\n", total_legal);
+    printf("Total unique positions %zu\n", num_states);
 
     node_value **base_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
     for (size_t i = 0; i < num_layers; i++) {
@@ -316,26 +373,31 @@ int main(int argc, char *argv[]) {
     lin_dict ko_ld_ = (lin_dict) {0, 0, 0, NULL};
     lin_dict *ko_ld = &ko_ld_;
 
+    sol->base_nodes = base_nodes;
+    sol->leaf_nodes = leaf_nodes;
+    sol->ko_ld = ko_ld;
+
     state child_;
     state *child = &child_;
     size_t child_key;
-    size_t key = key_min;
+    size_t key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(base_state, s, key, 0));
+        assert(from_key_s(base_state, si, s, key, 0));
         value_t score = liberty_score(s);
-        leaf_nodes[i] = score * 0;
+        leaf_nodes[i] = score;
         for (size_t k = 0; k < num_layers; k++) {
             (base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
         for (int j = 0; j < STATE_SIZE; j++) {
             *child = *s;
-            if (make_move(child, 1ULL << j)) {
+            int prisoners;
+            if (make_move(child, 1ULL << j, &prisoners)) {
                 if (target_dead(child)) {
                     continue;
                 }
                 if (child->ko) {
-                    size_t dummy;
-                    child_key = to_key_s(base_state, child, &dummy);
+                    size_t child_layer;
+                    child_key = to_key_s(base_state, si, child, &child_layer);
                     add_lin_key(ko_ld, child_key);
                 }
             }
@@ -346,10 +408,11 @@ int main(int argc, char *argv[]) {
     finalize_lin_dict(ko_ld);
 
     node_value **ko_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
+    sol->ko_nodes = ko_nodes;
     for (size_t i = 0; i < num_layers; i++) {
         ko_nodes[i] = (node_value*) malloc(ko_ld->num_keys * sizeof(node_value));
     }
-    printf("Positions with ko %zu\n", ko_ld->num_keys);
+    printf("Unique positions with ko %zu\n", ko_ld->num_keys);
 
     for (size_t i = 0; i < ko_ld->num_keys; i++) {
         for (size_t k = 0; k < num_layers; k++) {
@@ -357,14 +420,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    #ifdef CHINESE
+    sol->leaf_rule = precalculated;
+    //#ifdef CHINESE
     printf("Negamax with Chinese rules.\n");
-    iterate(
-        d, ko_ld, num_layers,
-        base_nodes, ko_nodes, leaf_nodes,
-        base_state, key_min, 0
-    );
-    #endif
+    iterate(sol);
+    //#endif
+
+    /*
 
     // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed the number of stones killed.
     printf("Negamax with capture rules.\n");
@@ -540,6 +602,7 @@ int main(int argc, char *argv[]) {
             parity = !parity;
         }
     }
+    */
 
     /*
     char dir_name[16];

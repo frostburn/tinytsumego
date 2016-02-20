@@ -29,31 +29,16 @@ typedef struct state
     stones_t immortal;
     int passes;
     int ko_threats;
-
-    int num_moves;
-    stones_t moves[STATE_SIZE + 1];
+    int white_to_play;
 } state;
 
-
-size_t bitscan_left(stones_t stone);
-
-int is_legal(state *s);
-
-void init_state(state *s) {
-    assert(!(~s->playing_area & (s->player | s->opponent | s->ko | s->target | s->immortal)));
-    assert(!(s->player & s->opponent));
-    assert(!((s->player | s->opponent) & s->ko));
-
-    stones_t open = s->playing_area & ~(s->target | s->immortal);
-    s->num_moves = 1;
-    s->moves[0] = 0;
-    for (int i = 0;i < STATE_SIZE; i++) {
-        stones_t p = 1ULL << i;
-        if (p & open) {
-            s->moves[s->num_moves++] = p;
-        }
-    }
-}
+typedef struct state_info
+{
+    int size;
+    int num_moves;
+    stones_t moves[STATE_SIZE + 1];
+    int symmetry; // 1 color, 2 mirror v/h, 3 mirror v/h/d  // TODO only v, only d, rotational?
+} state_info;
 
 void print_stones(stones_t stones) {
     printf(" ");
@@ -78,8 +63,16 @@ void print_stones(stones_t stones) {
     printf("\n");
 }
 
-
 void print_state(state *s) {
+    stones_t black, white;
+    if (s->white_to_play) {
+        white = s->player;
+        black = s->opponent;
+    }
+    else {
+        black = s->player;
+        white = s->opponent;
+    }
     printf(" ");
     for (int i = 0; i < WIDTH; i++) {
         printf(" %c", 'A' + i);
@@ -96,25 +89,25 @@ void print_state(state *s) {
         else {
             printf("\x1b[0m");
         }
-        if (p & s->player) {
+        if (p & black) {
             printf("\x1b[30m");  // Black
             if (p & s->target) {
-                printf(" p");
+                printf(" b");
             }
             else if (p & s->immortal) {
-                printf(" P");
+                printf(" B");
             }
             else {
                 printf(" @");
             }
         }
-        else if (p & s->opponent) {
+        else if (p & white) {
             printf("\x1b[37m");  // White
             if (p & s->target) {
-                printf(" o");
+                printf(" w");
             }
             else if (p & s->immortal) {
-                printf(" O");
+                printf(" W");
             }
             else {
                 printf(" 0");
@@ -135,7 +128,7 @@ void print_state(state *s) {
             printf("\x1b[0m\n");
         }
     }
-    printf("passes = %d ko_threats = %d\n", s->passes, s->ko_threats);
+    printf("passes = %d ko_threats = %d white_to_play = %d\n", s->passes, s->ko_threats, s->white_to_play);
 }
 
 int popcount(stones_t stones) {
@@ -267,7 +260,7 @@ int liberty_score(state *s) {
     return popcount(player_controlled) - popcount(opponent_controlled);
 }
 
-int make_move(state *s, stones_t move) {
+int make_move(state *s, stones_t move, int *num_kill) {
     stones_t old_player = s->player;
     if (!move) {
         if (s->ko){
@@ -279,6 +272,8 @@ int make_move(state *s, stones_t move) {
         s->player = s->opponent;
         s->opponent = old_player;
         s->ko_threats = -s->ko_threats;
+        s->white_to_play = !s->white_to_play;
+        *num_kill = 0;
         // assert(is_legal(s));
         return 1;
     }
@@ -319,7 +314,8 @@ int make_move(state *s, stones_t move) {
     }
 
     s->ko = 0;
-    if (popcount(kill) == 1) {
+    *num_kill = popcount(kill);
+    if (*num_kill == 1) {
         if (liberties(move, s->playing_area & ~s->opponent) == kill) {
             s->ko = kill;
         }
@@ -337,6 +333,7 @@ int make_move(state *s, stones_t move) {
     s->player = s->opponent;
     s->opponent = old_player;
     s->ko_threats = -s->ko_threats;
+    s->white_to_play = !s->white_to_play;
     // assert(is_legal(s));
     return 1;
 }
@@ -407,14 +404,14 @@ int is_legal(state *s) {
 }
 */
 
-int from_key(state *s, size_t key) {
+int from_key(state *s, state_info *si, size_t key) {
     stones_t fixed = s->target | s->immortal;
     s->player &= fixed;
     s->opponent &= fixed;
     s->ko = 0;
 
-    for (int i = 1; i < s->num_moves; i++) {
-        stones_t p = s->moves[i];
+    for (int i = 1; i < si->num_moves; i++) {
+        stones_t p = si->moves[i];
         if (key % 3 == 1) {
             s->player |= p;
         }
@@ -426,10 +423,10 @@ int from_key(state *s, size_t key) {
     return is_legal(s);
 }
 
-size_t to_key(state *s) {
+size_t to_key(state *s, state_info *si) {
     size_t key = 0;
-    for (int i = s->num_moves - 1; i > 0; i--) {
-        stones_t p = s->moves[i];
+    for (int i = si->num_moves - 1; i > 0; i--) {
+        stones_t p = si->moves[i];
         key *= 3;
         if (p & s->player) {
             key += 1;
@@ -458,6 +455,177 @@ size_t max_key(state *s) {
     return key;
 }
 
+stones_t s_mirror_v(stones_t stones) {
+    assert(HEIGHT == 7);
+    stones = ((stones >> (4 * V_SHIFT)) & 0x7FFFFFFULL) | ((stones & 0x7FFFFFFULL) << (4 * V_SHIFT)) | (stones & 0xFF8000000ULL);
+    return ((stones >> (2 * V_SHIFT)) & 0x1FF0000001FFULL) | ((stones & 0x1FF0000001FFULL) << (2 * V_SHIFT)) | (stones & 0x3FE00FF803FE00ULL);
+}
+
+stones_t s_mirror_h(stones_t stones) {
+    assert(WIDTH == 9);
+    stones = ((stones >> 6) & 0x1C0E070381C0E07ULL) | ((stones & 0x1C0E070381C0E07ULL) << 6) | (stones & 0xE070381C0E07038ULL);
+    return ((stones >> 2) & 0x1249249249249249ULL) | ((stones & 0x1249249249249249ULL) << 2) | (stones & 0x2492492492492492ULL);
+}
+
+stones_t s_mirror_d(stones_t stones) {
+    assert(HEIGHT == 7 && HEIGHT < WIDTH);
+    return (
+        (stones & 0x1004010040100401ULL) |
+        ((stones & 0x8020080200802ULL) << D_SHIFT) |
+        ((stones >> D_SHIFT) & 0x8020080200802ULL) |
+        ((stones & 0x40100401004ULL) << (2 * D_SHIFT)) |
+        ((stones >> (2 * D_SHIFT)) & 0x40100401004ULL) |
+        ((stones & 0x200802008ULL) << (3 * D_SHIFT)) |
+        ((stones >> (3 * D_SHIFT)) & 0x200802008ULL) |
+        ((stones & 0x1004010ULL) << (4 * D_SHIFT)) |
+        ((stones >> (4 * D_SHIFT)) & 0x1004010ULL) |
+        ((stones & 0x8020ULL) << (5 * D_SHIFT)) |
+        ((stones >> (5 * D_SHIFT)) & 0x8020ULL) |
+        ((stones & 0x40ULL) << (6 * D_SHIFT)) |
+        ((stones >> (6 * D_SHIFT)) & 0x40ULL)
+    );
+}
+
+void snap(state *s) {
+    for (int i = 0; i < WIDTH; i++) {
+        if (s->playing_area & (WEST_WALL << i)){
+            s->playing_area >>= i;
+            s->player >>= i;
+            s->opponent >>= i;
+            s->ko >>= i;
+            break;
+        }
+    }
+    for (int i = 0; i < HEIGHT * V_SHIFT; i += V_SHIFT) {
+        if (s->playing_area & (NORTH_WALL << i)){
+            s->playing_area >>= i;
+            s->player >>= i;
+            s->opponent >>= i;
+            s->ko >>= i;
+            return;
+        }
+    }
+}
+
+void mirror_h(state *s) {
+    s->playing_area = s_mirror_h(s->playing_area);
+    s->player = s_mirror_h(s->player);
+    s->opponent = s_mirror_h(s->opponent);
+    s->ko = s_mirror_h(s->ko);
+    snap(s);
+}
+
+void mirror_v(state *s) {
+    s->playing_area = s_mirror_v(s->playing_area);
+    s->player = s_mirror_v(s->player);
+    s->opponent = s_mirror_v(s->opponent);
+    s->ko = s_mirror_v(s->ko);
+    snap(s);
+}
+
+void mirror_d(state *s) {
+    s->player = s_mirror_d(s->player);
+    s->opponent = s_mirror_d(s->opponent);
+    s->ko = s_mirror_d(s->ko);
+}
+
+int less_than(state *a, state *b) {
+    if (a->player < b->player) {
+        return 1;
+    }
+    else if (a->player == b->player){
+        if (a->opponent < b->opponent) {
+            return 1;
+        }
+        else if (a->opponent == b->opponent) {
+            return a->ko < b->ko;
+        }
+    }
+    return 0;
+}
+
+void canonize(state *s, state_info *si) {
+    if (!si->symmetry) {
+        return;
+    }
+    s->white_to_play = 0;
+    if (si->symmetry == 1) {
+        return;
+    }
+    state temp_ = *s;
+    state *temp = &temp_;
+
+    mirror_v(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+    mirror_h(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+    mirror_v(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+
+    if (si->symmetry == 2) {
+        return;
+    }
+
+    mirror_d(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+    mirror_v(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+    mirror_h(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+    mirror_v(temp);
+    if (less_than(temp, s)) {
+        *s = *temp;
+    }
+}
+
+void init_state(state *s, state_info *si) {
+    assert(!(~s->playing_area & (s->player | s->opponent | s->ko | s->target | s->immortal)));
+    assert(!(s->player & s->opponent));
+    assert(!((s->player | s->opponent) & s->ko));
+
+    stones_t open = s->playing_area & ~(s->target | s->immortal);
+    si->num_moves = 1;
+    si->moves[0] = 0;
+    si->size = 0;
+    for (int i = 0;i < STATE_SIZE; i++) {
+        stones_t p = 1ULL << i;
+        if (p & open) {
+            si->size++;
+            si->moves[si->num_moves++] = p;
+        }
+    }
+    if (s->target | s->immortal) {
+        si->symmetry = 0;
+    }
+    else {
+        si->symmetry = 1;
+        state temp_ = *s;
+        state *temp = &temp_;
+        mirror_v(temp);
+        if (s->playing_area == temp->playing_area) {
+            mirror_h(temp);
+            if (s->playing_area == temp->playing_area) {
+                si->symmetry = 2;
+                if (s->playing_area == s_mirror_d(s->playing_area)) {
+                    si->symmetry = 3;
+                }
+            }
+        }
+    }
+}
+
 #ifndef MAIN
 int main() {
     stones_t a = 0x19bf3315;
@@ -471,13 +639,17 @@ int main() {
 
     state s_ = (state) {rectangle(5, 4), 0, 0, 0, 0, 0, 0};
     state *s = &s_;
-    make_move(s, 1ULL << (2 + 3 * V_SHIFT));
-    make_move(s, 1ULL << (4 + 1 * V_SHIFT));
+    state_info si_;
+    state_info *si = &si_;
+    init_state(s, si);
+    int prisoners;
+    make_move(s, 1ULL << (2 + 3 * V_SHIFT), &prisoners);
+    make_move(s, 1ULL << (4 + 1 * V_SHIFT), &prisoners);
     print_state(s);
 
-    size_t key = to_key(s);
+    size_t key = to_key(s, si);
     printf("%zu\n", key);
-    printf("%d\n", from_key(s, key));
+    printf("%d\n", from_key(s, si, key));
     print_state(s);
 
     print_stones(NORTH_WALL);
@@ -490,25 +662,53 @@ int main() {
     dimensions(rectangle(4, 3), &width, &height);
     printf("%d, %d\n", width, height);
 
-    *s = (state) {rectangle(6, 8), WEST_WALL, 2ULL, 0, 2ULL, WEST_WALL, 0};
+    *s = (state) {rectangle(6, 7), WEST_WALL, 2ULL, 0, 2ULL, WEST_WALL, 0};
+    init_state(s, si);
     max_key(s);
     state z_;
     state *z = &z_;
     *z = *s;
-    assert(from_key(z, to_key(s)));
+    assert(from_key(z, si, to_key(s, si)));
     assert(z->player == s->player && z->opponent == s->opponent);
     time_t t = time(0);
     srand(t);
     for (int i = 0; i < 3000; i++) {
-       if (make_move(s, 1ULL << (rand() % WIDTH + (rand() % HEIGHT) * V_SHIFT))) {
+       if (make_move(s, one(rand() % WIDTH, rand() % HEIGHT), &prisoners)) {
             print_state(s);
-            from_key(s, to_key(s));
+            from_key(s, si, to_key(s, si));
             if (target_dead(s)) {
                 break;
             }
         }
     }
     printf("%ld\n", t);
+
+    print_stones(0x1C0E070381C0E07ULL);
+    print_stones(0xE070381C0E07038ULL);
+    print_stones(0x1249249249249249ULL);
+    print_stones(0x2492492492492492ULL);
+
+    print_stones(0x7FFFFFFULL);
+    print_stones(0xFF8000000ULL);
+    print_stones(0x1FF0000001FFULL);
+    print_stones(0x3FE00FF803FE00ULL);
+
+    print_stones(a);
+    print_stones(s_mirror_h(a));
+    print_stones(s_mirror_v(a));
+
+    print_stones(0x1004010040100401ULL);
+    print_stones(0x8020080200802ULL);
+
+    print_stones(s_mirror_d(a));
+
+    s->target = 0;
+    s->immortal = 0;
+    print_state(s);
+    init_state(s, si);
+    assert(si->symmetry == 2);
+    canonize(s, si);
+    print_state(s);
 
     return 0;
 }
