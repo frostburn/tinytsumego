@@ -140,17 +140,17 @@ int test_lin_key(lin_dict *ld, size_t key) {
 }
 
 void add_lin_key(lin_dict *ld, size_t key) {
-    if (test_lin_key(ld, key)){
-        return;
-    }
+    // if (test_lin_key(ld, key)){
+    //     return;
+    // }
     if (!ld->size){
         ld->size = 8;
         ld->sorted_size = 1;
         ld->keys = (size_t*) malloc(sizeof(size_t) * ld->size);
     }
     else if (ld->num_keys >= ld->size) {
-        ld->sorted_size = ld->size;
-        qsort((void*) ld->keys, ld->sorted_size, sizeof(size_t), _compar);
+        // ld->sorted_size = ld->size;
+        // qsort((void*) ld->keys, ld->sorted_size, sizeof(size_t), _compar);
         ld->size = ld->size * 3;
         ld->size >>= 1;
         ld->keys = (size_t*) realloc(ld->keys, sizeof(size_t) * ld->size);
@@ -166,6 +166,18 @@ size_t lin_key_index(lin_dict *ld, size_t key) {
 void finalize_lin_dict(lin_dict *ld) {
     ld->keys = (size_t*) realloc(ld->keys, sizeof(size_t) * ld->num_keys);
     qsort((void*) ld->keys, ld->num_keys, sizeof(size_t), _compar);
+    ld->sorted_size = 0;
+    size_t lag = 0;
+    size_t last = ld->keys[0] + 1;
+    for (size_t i = 0; i < ld->num_keys; i++) {
+        if (last == ld->keys[i]) {
+            lag++;
+        }
+        else {
+            ld->keys[i - lag] = ld->keys[i];
+        }
+    }
+    ld->sorted_size = ld->num_keys - lag;
 }
 
 void* btree_get(vertex *root, int depth, size_t key) {

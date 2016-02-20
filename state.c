@@ -30,7 +30,6 @@ typedef struct state
     int passes;
     int ko_threats;
 
-    stones_t hint;
     int num_moves;
     stones_t moves[STATE_SIZE + 1];
 } state;
@@ -41,8 +40,11 @@ size_t bitscan_left(stones_t stone);
 int is_legal(state *s);
 
 void init_state(state *s) {
+    assert(!(~s->playing_area & (s->player | s->opponent | s->ko | s->target | s->immortal)));
+    assert(!(s->player & s->opponent));
+    assert(!((s->player | s->opponent) & s->ko));
+
     stones_t open = s->playing_area & ~(s->target | s->immortal);
-    s->hint = 1ULL << bitscan_left(open);
     s->num_moves = 1;
     s->moves[0] = 0;
     for (int i = 0;i < STATE_SIZE; i++) {
@@ -168,6 +170,18 @@ stones_t rectangle(int width, int height) {
         }
     }
     return r;
+}
+
+stones_t one(int x, int y) {
+    return 1ULL << (x * H_SHIFT + y * V_SHIFT);
+}
+
+stones_t two(int x, int y) {
+    return 3ULL << (x * H_SHIFT + y * V_SHIFT);
+}
+
+stones_t tvo(int x, int y) {
+    return (1ULL | (1ULL << V_SHIFT)) << (x * H_SHIFT + y * V_SHIFT);
 }
 
 void dimensions(stones_t stones, int *width, int *height) {
@@ -395,42 +409,34 @@ int is_legal(state *s) {
 
 int from_key(state *s, size_t key) {
     stones_t fixed = s->target | s->immortal;
-    stones_t open = s->playing_area & ~fixed;
     s->player &= fixed;
     s->opponent &= fixed;
     s->ko = 0;
-    stones_t p = 1ULL;
-    while (key) {
-        if (p & open){
-            if (key % 3 == 1) {
-                s->player |= p;
-            }
-            else if (key % 3 == 2) {
-                s->opponent |= p;
-            }
-            key /= 3;
+
+    for (int i = 1; i < s->num_moves; i++) {
+        stones_t p = s->moves[i];
+        if (key % 3 == 1) {
+            s->player |= p;
         }
-        p <<= 1;
+        else if (key % 3 == 2) {
+            s->opponent |= p;
+        }
+        key /= 3;
     }
     return is_legal(s);
 }
 
 size_t to_key(state *s) {
     size_t key = 0;
-    // stones_t p = 1ULL << (STATE_SIZE - 1);  // TODO: Use state specific starting value.
-    stones_t p = s->hint;
-    stones_t open = s->playing_area & ~(s->target | s->immortal);
-    while (p) {
-        if (p & open) {
-            key *= 3;
-            if (p & s->player) {
-                key += 1;
-            }
-            else if (p & s->opponent) {
-                key += 2;
-            }
+    for (int i = s->num_moves - 1; i > 0; i--) {
+        stones_t p = s->moves[i];
+        key *= 3;
+        if (p & s->player) {
+            key += 1;
         }
-        p >>= 1;
+        else if (p & s->opponent) {
+            key += 2;
+        }
     }
     return key;
 }

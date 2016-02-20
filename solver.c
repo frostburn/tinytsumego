@@ -262,11 +262,12 @@ int main(int argc, char *argv[]) {
     state *base_state = &base_state_;
     // base_state->opponent = base_state->target = NORTH_WALL & base_state->playing_area;
 
-    *base_state = *corner_six_2;
+    // *base_state = *corner_six;
     // *base_state = *bulky_ten;
     // *base_state = *cho3;
+    *base_state = *cho534;
     // base_state->opponent = base_state->target |= 1ULL << 9;
-    base_state->ko_threats = 1;
+    // base_state->ko_threats = 1;
 
     init_state(base_state);
 

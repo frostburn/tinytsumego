@@ -81,3 +81,37 @@ cho3->opponent |= 3UL << (5 + V_SHIFT);
 state cho4_ = cho1_4_;
 state *cho4 = &cho4_;
 cho4->opponent |= 3UL << (5 + V_SHIFT);
+
+state cho529_532_ = (state) {
+    rectangle(6, 6),
+    south(east(rectangle(5, 5))) & ~rectangle(4, 4),
+    two(1, 3) | tvo(3, 1),
+    0,
+    0,
+    0,
+    0,
+    0
+};
+state *cho529_532 = &cho529_532_;
+cho529_532->immortal = cho529_532->player;
+cho529_532->target = cho529_532->opponent;
+
+state cho532_ = cho529_532_;
+state *cho532 = &cho532_;
+cho532->player |= one(1, 1);
+cho532->opponent |= one(4, 0) | one(0, 1) | one(0, 4);
+
+state cho534_ = (state) {
+    rectangle(7, 5),
+    south(south(south(rectangle(4, 1)))) | two(2, 0) | tvo(4, 1),
+    rectangle(7, 5) ^ rectangle(5, 4) ^ one(4, 3) ^ two(5, 0),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho534 = &cho534_;
+cho534->target = cho534->player;
+cho534->immortal = cho534->opponent;
+cho534->opponent |= two(2, 1) | one(1, 2);
