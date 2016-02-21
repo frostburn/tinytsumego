@@ -416,6 +416,8 @@ int main(int argc, char *argv[]) {
     #endif
 
     // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed the number of stones killed.
+    // This can probably be remedied by setting the value of the stones on the board high enough compared to the stones that come later.
+    // That doesn't sit well with tablebases though.
     printf("Negamax with capture rules.\n");
     sol->count_prisoners = 1;
     sol->leaf_rule = none;
@@ -483,30 +485,24 @@ int main(int argc, char *argv[]) {
     sol->leaf_rule = precalculated;
     iterate(sol);
 
-    /*
     *s = *base_state;
 
     char coord1;
     int coord2;
 
-    int parity = 0;
+    int total_prisoners = 0;
+    int turn = 0;
+
     while (1) {
         size_t layer;
-        size_t key = to_key_s(base_state, s, &layer);
-        node_value v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, s, key, layer, 0, japanese_rules, 0);
-        if (parity) {
-            state ps_;
-            state *ps = &ps_;
-            *ps = *s;
-            ps->player = s->opponent;
-            ps->opponent = s->player;
-            ps->ko_threats = -s->ko_threats;
-            print_state(ps);
-            print_node((node_value){-v.high, -v.low, v.high_distance, v.low_distance});
+        size_t key = to_key_s(base_state, si, s, &layer);
+        node_value v = negamax_node(sol, s, key, layer, 0);
+        print_state(s);
+        if (turn) {
+            print_node((node_value) {total_prisoners - v.high, total_prisoners - v.low, v.high_distance, v.low_distance});
         }
         else {
-            print_state(s);
-            print_node(v);
+            print_node((node_value) {total_prisoners + v.low, total_prisoners + v.high, v.low_distance, v.high_distance});
         }
         if (target_dead(s) || s->passes >= 2) {
             break;
@@ -522,12 +518,12 @@ int main(int argc, char *argv[]) {
             }
             char c1 = 'A' + (j % WIDTH);
             char c2 = '0' + (j / WIDTH);
-            if (make_move(child, move)) {
+            int prisoners;
+            if (make_move(child, move, &prisoners)) {
                 size_t child_layer;
-                size_t child_key = to_key_s(base_state, child, &child_layer);
-                node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, leaf_nodes, base_state, child, child_key, child_layer, 0, japanese_rules, 0);
-                if (japanese_rules) {
-                    int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+                size_t child_key = to_key_s(base_state, si, child, &child_layer);
+                node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
+                if (sol->count_prisoners) {
                     if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
                         child_v.low = child_v.low - prisoners;
                     }
@@ -576,11 +572,17 @@ int main(int argc, char *argv[]) {
         else {
             move = 1ULL << (coord1 + V_SHIFT * coord2);
         }
-        if (make_move(s, move)) {
-            parity = !parity;
+        int prisoners;
+        if (make_move(s, move, &prisoners)) {
+            if (turn) {
+                total_prisoners -= prisoners;
+            }
+            else {
+                total_prisoners += prisoners;
+            }
+            turn = !turn;
         }
     }
-    */
 
     /*
     char dir_name[16];
