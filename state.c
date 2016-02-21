@@ -37,6 +37,10 @@ typedef struct state_info
     int size;
     int num_moves;
     stones_t moves[STATE_SIZE + 1];
+    int num_blocks;
+    size_t exponents[STATE_SIZE];
+    int shifts[STATE_SIZE];
+    stones_t masks[STATE_SIZE];
     int symmetry; // 1 color, 2 mirror v/h, 3 mirror v/h/d  // TODO only v, only d, rotational?
 } state_info;
 
@@ -194,9 +198,10 @@ void dimensions(stones_t stones, int *width, int *height) {
 
 stones_t flood(register stones_t source, register stones_t target) {
     source &= target;
-    if (!source){
-        return source;
-    }
+    // Conditionals are costly.
+    // if (!source){
+    //     return source;
+    // }
     register stones_t temp = WEST_BLOCK & target;
     source |= temp & ~(source + temp);
     do {
@@ -423,17 +428,18 @@ int from_key(state *s, state_info *si, size_t key) {
     return is_legal(s);
 }
 
+static size_t BLOCK_KEYS[32] = {0, 1, 3, 4, 9, 10, 12, 13, 27, 28, 30, 31, 36, 37, 39, 40, 81, 82, 84, 85, 90, 91, 93, 94, 108, 109, 111, 112, 117, 118, 120, 121};
+
 size_t to_key(state *s, state_info *si) {
     size_t key = 0;
-    for (int i = si->num_moves - 1; i > 0; i--) {
-        stones_t p = si->moves[i];
-        key *= 3;
-        if (p & s->player) {
-            key += 1;
-        }
-        else if (p & s->opponent) {
-            key += 2;
-        }
+    for (int i = si->num_blocks - 1; i >= 0; i--) {
+        size_t e = si->exponents[i];
+        int shift = si->shifts[i];
+        stones_t mask = si->masks[i];
+        stones_t player = (s->player >> shift) & mask;
+        stones_t opponent = (s->opponent >> shift) & mask;
+        key *= e;
+        key += BLOCK_KEYS[player] + 2 * BLOCK_KEYS[opponent];
     }
     return key;
 }
@@ -604,6 +610,37 @@ void init_state(state *s, state_info *si) {
         if (p & open) {
             si->size++;
             si->moves[si->num_moves++] = p;
+        }
+    }
+    si->num_blocks = 0;
+    for (int i = 0;i < STATE_SIZE; i++) {
+        if (!((31ULL << i) & ~open)) {
+            si->exponents[si->num_blocks] = 243;
+            si->masks[si->num_blocks] = 31ULL;
+            si->shifts[si->num_blocks++] = i;
+            i += 4;
+        }
+        else if (!((15ULL << i) & ~open)) {
+            si->exponents[si->num_blocks] = 81;
+            si->masks[si->num_blocks] = 15ULL;
+            si->shifts[si->num_blocks++] = i;
+            i += 3;
+        }
+        else if (!((7ULL << i) & ~open)) {
+            si->exponents[si->num_blocks] = 27;
+            si->masks[si->num_blocks] = 7ULL;
+            si->shifts[si->num_blocks++] = i;
+            i += 2;
+        }
+        else if (!((3ULL << i) & ~open)) {
+            si->exponents[si->num_blocks] = 9;
+            si->masks[si->num_blocks] = 3ULL;
+            si->shifts[si->num_blocks++] = i++;
+        }
+        else if ((1ULL << i) & open) {
+            si->exponents[si->num_blocks] = 3;
+            si->masks[si->num_blocks] = 1ULL;
+            si->shifts[si->num_blocks++] = i;
         }
     }
     if (s->target | s->immortal) {

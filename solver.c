@@ -208,12 +208,7 @@ void iterate(solution *sol) {
     }
 }
 
-/*
-void endstate(
-        dict *d, lin_dict *ko_ld,
-        node_value **base_nodes, node_value **ko_nodes,
-        state *base_state, state *s, node_value parent_v, int turn, int low_player
-    ) {
+void endstate(solution *sol, state *s, node_value parent_v, int turn, int low_player) {
     if (s->passes == 2 || target_dead(s)) {
         if (turn) {
             stones_t temp = s->player;
@@ -224,17 +219,16 @@ void endstate(
     }
     state child_;
     state *child = &child_;
-    for (int j = 0; j < s->num_moves; j++) {
+    for (int j = 0; j < sol->si->num_moves; j++) {
         *child = *s;
-        stones_t move = s->moves[j];
-        if (make_move(child, move)) {
+        stones_t move = sol->si->moves[j];
+        int prisoners;
+        if (make_move(child, move, &prisoners)) {
             size_t child_layer;
-            size_t child_key = to_key_s(base_state, child, &child_layer);
-            node_value child_v = negamax_node(d, ko_ld, base_nodes, ko_nodes, NULL, base_state, child, child_key, child_layer, 2, 1, 0);
+            size_t child_key = to_key_s(sol->base_state, sol->si, child, &child_layer);
+            node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
             node_value child_v_p = child_v;
-            int japanese_rules = 1;
-            if (japanese_rules) {
-                int prisoners = (popcount(s->opponent) - popcount(child->player)) * PRISONER_VALUE;
+            if (sol->count_prisoners) {
                 if (child_v_p.low > -TARGET_SCORE && child_v_p.low < TARGET_SCORE) {
                     child_v_p.low = child_v_p.low - prisoners;
                 }
@@ -246,17 +240,12 @@ void endstate(
             is_best_child = low_player ? is_best_child : (-child_v_p.low == parent_v.high && child_v_p.low_distance + 1 == parent_v.high_distance);
             if (is_best_child) {
                 *s = *child;
-                endstate(
-                    d, ko_ld,
-                    base_nodes, ko_nodes,
-                    base_state, s, child_v, !turn, !low_player
-                );
+                endstate(sol, s, child_v, !turn, !low_player);
                 return;
             }
         }
     }
 }
-*/
 
 int main(int argc, char *argv[]) {
     int width = -1;
@@ -266,7 +255,7 @@ int main(int argc, char *argv[]) {
         if (argc == 2) {
             ko_threats = atoi(argv[1]);
         }
-        printf("Using predifined tsumego");
+        printf("Using predifined tsumego\n");
     }
     else {
         if (argc == 4) {
@@ -301,8 +290,8 @@ int main(int argc, char *argv[]) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
     }
     else {
-        // *base_state = *corner_six_1;
-        *base_state = *bulky_ten;
+        *base_state = *corner_six_1;
+        // *base_state = *bulky_ten;
         // *base_state = *cho3;
         // *base_state = *cho534;
     }
@@ -421,36 +410,27 @@ int main(int argc, char *argv[]) {
     }
 
     sol->leaf_rule = precalculated;
-    //#ifdef CHINESE
+    #ifdef CHINESE
     printf("Negamax with Chinese rules.\n");
     iterate(sol);
-    //#endif
-
-    /*
+    #endif
 
     // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed the number of stones killed.
     printf("Negamax with capture rules.\n");
-    int japanese_rules = 1;
-    iterate(
-        d, ko_ld, num_layers,
-        base_nodes, ko_nodes, leaf_nodes,
-        base_state, key_min, 1
-    );
+    sol->count_prisoners = 1;
+    sol->leaf_rule = none;
+    iterate(sol);
 
     // Japanese leaf state calculation.
     size_t zero_layer = abs(base_state->ko_threats);
     state new_s_;
     state *new_s = &new_s_;
-    key = key_min;
+    key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(base_state, s, key, zero_layer));
+        assert(from_key_s(base_state, si, s, key, zero_layer));
 
         *new_s = *s;
-        endstate(
-            d, ko_ld,
-            base_nodes, ko_nodes,
-            base_state, new_s, base_nodes[zero_layer][i], 0, 1
-        );
+        endstate(sol, new_s, base_nodes[zero_layer][i], 0, 1);
 
         stones_t player_alive = s->player & new_s->player;
         stones_t opponent_alive = s->opponent & new_s->opponent;
@@ -500,12 +480,10 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Negamax with Japanese rules.\n");
-    iterate(
-        d, ko_ld, num_layers,
-        base_nodes, ko_nodes, leaf_nodes,
-        base_state, key_min, 1
-    );
+    sol->leaf_rule = precalculated;
+    iterate(sol);
 
+    /*
     *s = *base_state;
 
     char coord1;
