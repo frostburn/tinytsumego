@@ -35,6 +35,71 @@ typedef struct solution {
     int count_prisoners;
 } solution;
 
+void save_solution(solution *sol, char *filename) {
+    FILE *f = fopen(filename, "wb");
+    size_t state_size = sizeof(state);
+    fwrite((void*) &state_size, sizeof(size_t), 1, f);
+    fwrite((void*) sol->base_state, state_size, 1, f);
+    fwrite((void*) &(sol->d->num_slots), sizeof(size_t), 1, f);
+    fwrite((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f);
+    fwrite((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f);
+    fwrite((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f);
+    fwrite((void*) &(sol->num_layers), sizeof(size_t), 1, f);
+    size_t num_states = num_keys(sol->d);
+    for (int i = 0;i < sol->num_layers; i++) {
+        fwrite((void*) sol->base_nodes[i], sizeof(node_value), num_states, f);
+        fwrite((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f);
+    }
+    fwrite((void*) sol->leaf_nodes, sizeof(value_t), num_states, f);
+    fwrite((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f);
+    fwrite((void*) &(sol->count_prisoners), sizeof(int), 1, f);
+    fclose(f);
+}
+
+// TODO: Allocations
+void load_solution(solution *sol, char *filename) {
+    FILE *f = fopen(filename, "rb");
+    size_t state_size;
+    fread((void*) &state_size, sizeof(size_t), 1, f);
+    fread((void*) sol->base_state, state_size, 1, f);
+    fread((void*) &(sol->d->num_slots), sizeof(size_t), 1, f);
+    fread((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f);
+    fread((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f);
+    fread((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f);
+    fread((void*) &(sol->num_layers), sizeof(size_t), 1, f);
+    finalize_dict(sol->d);
+    size_t min_key = 0;
+    for (size_t i = 0; i < sol->d->num_slots; i++) {
+        if (sol->d->slots[i]) {
+            for (size_t j = 0; j < 64; i++) {
+                if (test_key(sol->d, min_key)) {
+                    break;
+                }
+                else {
+                    min_key++;
+                }
+            }
+        }
+        else {
+            min_key += 64;
+        }
+    }
+    sol->d->min_key = min_key;
+    sol->d->max_key = 64 * sol->d->num_slots;
+
+    size_t num_states = num_keys(sol->d);
+    // sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
+    // sol->ko_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
+    for (int i = 0;i < sol->num_layers; i++) {
+        fread((void*) sol->base_nodes[i], sizeof(node_value), num_states, f);
+        fread((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f);
+    }
+    fread((void*) sol->leaf_nodes, sizeof(value_t), num_states, f);
+    fread((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f);
+    fread((void*) &(sol->count_prisoners), sizeof(int), 1, f);
+    fclose(f);
+}
+
 int sign(int x) {
     return (x > 0) - (x < 0);
 }
@@ -251,6 +316,11 @@ int main(int argc, char *argv[]) {
     int width = -1;
     int height = -1;
     int ko_threats = 0;
+    int load_sol = 0;
+    if (strcmp(argv[argc - 1], "load") == 0) {
+        load_sol = 1;
+        argc--;
+    }
     if (argc < 3) {
         if (argc == 2) {
             ko_threats = atoi(argv[1]);
@@ -409,9 +479,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    sol->leaf_rule = precalculated;
+    if (load_sol) {
+        goto frontend;
+    }
+
     #ifdef CHINESE
     printf("Negamax with Chinese rules.\n");
+    sol->count_prisoners = 0;
+    sol->leaf_rule = precalculated;
     iterate(sol);
     #endif
 
@@ -422,6 +497,8 @@ int main(int argc, char *argv[]) {
     sol->count_prisoners = 1;
     sol->leaf_rule = none;
     iterate(sol);
+
+    save_solution(sol, "capture.dat");
 
     // Japanese leaf state calculation.
     size_t zero_layer = abs(base_state->ko_threats);
@@ -484,6 +561,14 @@ int main(int argc, char *argv[]) {
     printf("Negamax with Japanese rules.\n");
     sol->leaf_rule = precalculated;
     iterate(sol);
+
+    frontend:
+    if (load_sol) {
+        load_solution(sol, "japanese.dat");
+    }
+    else {
+        save_solution(sol, "japanese.dat");
+    }
 
     *s = *base_state;
 
