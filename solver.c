@@ -599,7 +599,7 @@ int main(int argc, char *argv[]) {
                 move = 0;
             }
             else {
-                move = 1UL << j;
+                move = 1ULL << j;
             }
             char c1 = 'A' + (j % WIDTH);
             char c2 = '0' + (j / WIDTH);

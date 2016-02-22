@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define G_CONSTANT (1024)
+
 typedef unsigned long long slot_t;
 
 typedef struct dict
@@ -14,6 +16,14 @@ typedef struct dict
     size_t *checkpoints;
 } dict;
 
+typedef struct g_dict
+{
+    int (*is_member)(size_t key);
+    size_t num_keys;
+    size_t min_key;
+    size_t max_key;
+    size_t *checkpoints;
+} g_dict;
 
 typedef struct lin_dict
 {
@@ -55,7 +65,6 @@ void resize_dict(dict *d, size_t max_key) {
         memset(d->slots + d->num_slots, 0, (num_slots - d->num_slots) * sizeof(slot_t));
     }
     d->num_slots = num_slots;
-    d->max_key = max_key;
 }
 
 void finalize_dict(dict *d) {
@@ -71,15 +80,15 @@ void finalize_dict(dict *d) {
 }
 
 void add_key(dict *d, size_t key) {
-    slot_t bit = key % 64;
-    key /= 64;
-    d->slots[key] |= 1ULL << bit;
     if (key < d->min_key) {
         d->min_key = key;
     }
     if (key > d->max_key) {
         d->max_key = key;
     }
+    slot_t bit = key % 64;
+    key /= 64;
+    d->slots[key] |= 1ULL << bit;
 }
 
 slot_t test_key(dict *d, size_t key) {
@@ -125,6 +134,50 @@ size_t num_keys(dict *d) {
         num += popcountll(d->slots[i]);
     }
     return num;
+}
+
+void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key) {
+    gd->is_member = is_member;
+    gd->num_keys = 0;
+    gd->min_key = ~0ULL;
+    gd->max_key = 0ULL;
+    for (size_t i = 0; i < max_key; i++) {
+        if (is_member(i)) {
+            gd->min_key = i;
+            break;
+        }
+    }
+    gd->checkpoints = (size_t*) malloc((max_key / G_CONSTANT) * sizeof(size_t));
+    for (size_t i = 0; i < max_key; i++) {
+        if (i % G_CONSTANT == 0) {
+            gd->checkpoints[i / G_CONSTANT] = gd->num_keys;
+        }
+        if (is_member(i)) {
+            gd->num_keys++;
+            gd->max_key = i;
+        }
+    }
+    gd->checkpoints = (size_t*) realloc(gd->checkpoints, (gd->max_key / G_CONSTANT) * sizeof(size_t));
+}
+
+size_t g_key_index(g_dict *gd, size_t key) {
+    size_t index = gd->checkpoints[key / G_CONSTANT];
+    size_t i_min = G_CONSTANT * (key / G_CONSTANT);
+    for (size_t i = i_min; i < key; i++) {
+        if (gd->is_member(i)) {
+            index++;
+        }
+    }
+    return index;
+}
+
+size_t g_next_key(g_dict *gd, size_t last) {
+    while(last < gd->max_key) {
+        if (gd->is_member(++last)) {
+            return last;
+        }
+    }
+    return last;
 }
 
 int _compar(const void *a_, const void *b_) {
