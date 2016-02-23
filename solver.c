@@ -60,13 +60,13 @@ void save_solution(solution *sol, char *filename) {
 void load_solution(solution *sol, char *filename) {
     FILE *f = fopen(filename, "rb");
     size_t state_size;
-    fread((void*) &state_size, sizeof(size_t), 1, f);
-    fread((void*) sol->base_state, state_size, 1, f);
-    fread((void*) &(sol->d->num_slots), sizeof(size_t), 1, f);
-    fread((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f);
-    fread((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f);
-    fread((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f);
-    fread((void*) &(sol->num_layers), sizeof(size_t), 1, f);
+    assert(fread((void*) &state_size, sizeof(size_t), 1, f));
+    assert(fread((void*) sol->base_state, state_size, 1, f));
+    assert(fread((void*) &(sol->d->num_slots), sizeof(size_t), 1, f));
+    assert(fread((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f));
+    assert(fread((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f));
+    assert(fread((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f));
+    assert(fread((void*) &(sol->num_layers), sizeof(size_t), 1, f));
     finalize_dict(sol->d);
     size_t min_key = 0;
     for (size_t i = 0; i < sol->d->num_slots; i++) {
@@ -91,12 +91,12 @@ void load_solution(solution *sol, char *filename) {
     // sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
     // sol->ko_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
     for (int i = 0;i < sol->num_layers; i++) {
-        fread((void*) sol->base_nodes[i], sizeof(node_value), num_states, f);
-        fread((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f);
+        assert(fread((void*) sol->base_nodes[i], sizeof(node_value), num_states, f));
+        assert(fread((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f));
     }
-    fread((void*) sol->leaf_nodes, sizeof(value_t), num_states, f);
-    fread((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f);
-    fread((void*) &(sol->count_prisoners), sizeof(int), 1, f);
+    assert(fread((void*) sol->leaf_nodes, sizeof(value_t), num_states, f));
+    assert(fread((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f));
+    assert(fread((void*) &(sol->count_prisoners), sizeof(int), 1, f));
     fclose(f);
 }
 
@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
     }
     else {
-        *base_state = *corner_six_1;
+        *base_state = *corner_six_2;
         // *base_state = *bulky_ten;
         // *base_state = *cho3;
         // *base_state = *cho534;

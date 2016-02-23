@@ -37,6 +37,8 @@ typedef struct state_info
     int size;
     int num_moves;
     stones_t moves[STATE_SIZE + 1];
+    int num_external;
+    stones_t externals[STATE_SIZE];
     int num_blocks;
     size_t exponents[STATE_SIZE];
     int shifts[STATE_SIZE];
@@ -515,12 +517,26 @@ static stones_t PLAYER_BLOCKS[243] = {0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 
 static stones_t OPPONENT_BLOCKS[243] = {0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 24, 24, 25, 24, 24, 25, 26, 26, 27, 24, 24, 25, 24, 24, 25, 26, 26, 27, 28, 28, 29, 28, 28, 29, 30, 30, 31};
 static size_t BLOCK_KEYS[32] = {0, 1, 3, 4, 9, 10, 12, 13, 27, 28, 30, 31, 36, 37, 39, 40, 81, 82, 84, 85, 90, 91, 93, 94, 108, 109, 111, 112, 117, 118, 120, 121};
 
-// TODO: once fillable intersections
 int from_key(state *s, state_info *si, size_t key) {
     stones_t fixed = s->target | s->immortal;
     s->player &= fixed;
     s->opponent &= fixed;
     s->ko = 0;
+
+    for (int i = 0; i < si->num_external; i++) {
+        stones_t external = si->externals[i];
+        size_t e_size = popcount(external) + 1;
+        size_t num_filled = key % e_size;
+        key /= e_size;
+        stones_t p = 1ULL;
+        while (num_filled) {
+            if (p & external) {
+                s->player |= p;
+                num_filled--;
+            }
+            p <<= 1;
+        }
+    }
 
     for (int i = 0; i < si->num_blocks; i++) {
         size_t e = si->exponents[i];
@@ -544,6 +560,16 @@ size_t to_key(state *s, state_info *si) {
         key *= e;
         key += BLOCK_KEYS[player] + 2 * BLOCK_KEYS[opponent];
     }
+
+    for (int i = si->num_external - 1; i >= 0; i--) {
+        stones_t external = si->externals[i];
+        size_t e_size = popcount(external) + 1;
+        size_t num_filled = popcount(external & (s->player | s->opponent));
+        assert(num_filled < e_size);
+        key *= e_size;
+        key += num_filled;
+    }
+
     return key;
 }
 
@@ -771,6 +797,26 @@ int is_canonical(state *s, state_info *si) {
     return 1;
 }
 
+// Externals are groups of intersections where it doesn't matter
+// which player has filled them or in which order.
+// Player target liberties shared by opponent immortal liberties can only be filled once.
+// The ones that don't matter are those that can never take a liberty of any other chain.
+void process_external(state_info *si, stones_t player_target, stones_t opponent_immortal, stones_t playing_area) {
+    for (int i = 0;i < STATE_SIZE; i++) {
+        stones_t p = 1ULL << i;
+        stones_t chain = flood(p, player_target);
+        if (chain) {
+            stones_t external = liberties(chain, playing_area) & liberties(opponent_immortal, playing_area);
+            stones_t everything_else = playing_area & ~(chain | opponent_immortal | external);
+            external &= ~liberties(everything_else, playing_area);
+            if (external) {
+                si->externals[si->num_external++] = external;
+            }
+            player_target ^= chain;
+        }
+    }
+}
+
 void init_state(state *s, state_info *si) {
     assert(!(~s->playing_area & (s->player | s->opponent | s->ko | s->target | s->immortal)));
     assert(!(s->player & s->opponent));
@@ -787,6 +833,15 @@ void init_state(state *s, state_info *si) {
             si->moves[si->num_moves++] = p;
         }
     }
+
+    si->num_external = 0;
+    process_external(si, s->player & s->target, s->opponent & s->immortal, s->playing_area);
+    process_external(si, s->opponent & s->target, s->player & s->immortal, s->playing_area);
+
+    for (int i = 0;i < si->num_external; i++) {
+        open ^= si->externals[i];
+    }
+
     si->num_blocks = 0;
     for (int i = 0;i < STATE_SIZE; i++) {
         if (!((31ULL << i) & ~open)) {
