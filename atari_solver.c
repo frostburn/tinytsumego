@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
 
     *s = *base_state;
 
-    size_t max_k = max_key(base_state);
+    size_t max_k = max_key(base_state, si);
     int is_member(size_t key) {
         state s_ = *base_state;
         state *s = &s_;
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
         }
         return 1;
     }
-    init_g_dict(gd, is_member, max_k);
+    init_g_dict(gd, is_member, max_k, DEFAULT_G_CONSTANT);
     // for (size_t k = 0; k < max_k; k++) {
     //     if (!from_atari_key(s, si, k)){
     //         continue;
@@ -124,6 +124,10 @@ int main(int argc, char *argv[]) {
 
     // printf("Total positions %zu\n", total_legal);
     printf("Total unique positions %zu\n", num_states);
+    printf("Number of checkpoints %zu\n", gd->num_checkpoints);
+    FILE *f = fopen("atari_gd.dat", "wb");
+    fwrite((void*) gd->checkpoints, sizeof(size_t), gd->num_checkpoints, f);
+    fclose(f);
 
     size_t node_array_size = ceil_div(num_states, 8);
     array_t *nodes = (array_t*) malloc(node_array_size);
@@ -174,12 +178,12 @@ int main(int argc, char *argv[]) {
 
     frontend:
     if (load_sol) {
-        FILE *f = fopen("atari.dat", "rb");
+        f = fopen("atari.dat", "rb");
         assert(fread((void*) nodes, sizeof(array_t), node_array_size, f));
         fclose(f);
     }
     else {
-        FILE *f = fopen("atari.dat", "wb");
+        f = fopen("atari.dat", "wb");
         fwrite((void*) nodes, sizeof(array_t), node_array_size, f);
         fclose(f);
     }

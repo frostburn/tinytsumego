@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define G_CONSTANT (1024)
+#define DEFAULT_G_CONSTANT (1024)
 
 typedef unsigned long long slot_t;
 
@@ -22,6 +22,8 @@ typedef struct g_dict
     size_t num_keys;
     size_t min_key;
     size_t max_key;
+    size_t g_constant;
+    size_t num_checkpoints;
     size_t *checkpoints;
 } g_dict;
 
@@ -136,7 +138,7 @@ size_t num_keys(dict *d) {
     return num;
 }
 
-void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key) {
+void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key, size_t g_constant) {
     gd->is_member = is_member;
     gd->num_keys = 0;
     gd->min_key = ~0ULL;
@@ -147,22 +149,25 @@ void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key) {
             break;
         }
     }
-    gd->checkpoints = (size_t*) malloc((max_key / G_CONSTANT) * sizeof(size_t));
+    gd->g_constant = g_constant;
+    gd->num_checkpoints = ceil_div(max_key, g_constant);
+    gd->checkpoints = (size_t*) malloc(gd->num_checkpoints * sizeof(size_t));
     for (size_t i = 0; i < max_key; i++) {
-        if (i % G_CONSTANT == 0) {
-            gd->checkpoints[i / G_CONSTANT] = gd->num_keys;
+        if (i % g_constant == 0) {
+            gd->checkpoints[i / g_constant] = gd->num_keys;
         }
         if (is_member(i)) {
             gd->num_keys++;
             gd->max_key = i;
         }
     }
-    gd->checkpoints = (size_t*) realloc(gd->checkpoints, (gd->max_key / G_CONSTANT) * sizeof(size_t));
+    gd->num_checkpoints = ceil_div(max_key, g_constant);
+    gd->checkpoints = (size_t*) realloc(gd->checkpoints, gd->num_checkpoints * sizeof(size_t));
 }
 
 size_t g_key_index(g_dict *gd, size_t key) {
-    size_t index = gd->checkpoints[key / G_CONSTANT];
-    size_t i_min = G_CONSTANT * (key / G_CONSTANT);
+    size_t index = gd->checkpoints[key / gd->g_constant];
+    size_t i_min = gd->g_constant * (key / gd->g_constant);
     for (size_t i = i_min; i < key; i++) {
         if (gd->is_member(i)) {
             index++;
