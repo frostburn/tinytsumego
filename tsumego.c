@@ -115,3 +115,18 @@ state *cho534 = &cho534_;
 cho534->target = cho534->player;
 cho534->immortal = cho534->opponent;
 cho534->opponent |= two(2, 1) | one(1, 2);
+
+state cho535_537_ = (state) {
+    rectangle(7, 6),
+    south(east(rectangle(6, 5) ^ rectangle(3, 3))) | one(6, 0),
+    tvo(3, 1) | tvo(4, 2) | one(5, 3) | two(1, 3) | one(2, 4),
+};
+state *cho535_537 = &cho535_537_;
+cho535_537->player &= ~(two(4, 4) | one(6, 3) | cho535_537->opponent);
+cho535_537->immortal = cho535_537->player;
+cho535_537->target = cho535_537->opponent;
+
+state cho535_ = cho535_537_;
+state *cho535 = &cho535_;
+cho535->player |= one(2, 1);
+cho535->opponent |= one(1, 0) | one(0, 4);

@@ -360,10 +360,11 @@ int main(int argc, char *argv[]) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
     }
     else {
-        *base_state = *corner_six_2;
+        // *base_state = *corner_six_2;
         // *base_state = *bulky_ten;
         // *base_state = *cho3;
-        // *base_state = *cho534;
+        // *base_state = *cho532;
+        *base_state = *cho535;
     }
     base_state->ko_threats = ko_threats;
 
@@ -381,6 +382,9 @@ int main(int argc, char *argv[]) {
     }
 
     print_state(base_state);
+    for (int i = 0; i < si->num_external; i++) {
+        print_stones(si->externals[i]);
+    }
     state s_;
     state *s = &s_;
 
@@ -394,7 +398,7 @@ int main(int argc, char *argv[]) {
     sol->d = d;
     sol->num_layers = num_layers;
 
-    size_t max_k = max_key(base_state);
+    size_t max_k = max_key(base_state, si);
     if (!si->symmetry) {
         max_k *= 2;
     }

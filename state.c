@@ -599,20 +599,21 @@ int from_atari_key(state *s, state_info *si, size_t key) {
     return is_atari_legal(s);
 }
 
-size_t max_key(state *s) {
-    size_t exponent = 0;
+size_t max_key(state *s, state_info *si) {
     size_t key = 0;
-    stones_t p = 1ULL << (STATE_SIZE - 1);
-    stones_t open = s->playing_area & ~(s->target | s->immortal);
-    while (p) {
-        if (p & open){
-            key *= 3;
-            key += 2;
-            exponent++;
-        }
-        p >>= 1;
+    for (int i = si->num_blocks - 1; i >= 0; i--) {
+        size_t e = si->exponents[i];
+        key *= e;
+        key += e - 1;
     }
-    assert(exponent <= 40);
+
+    for (int i = si->num_external - 1; i >= 0; i--) {
+        stones_t external = si->externals[i];
+        size_t e_size = popcount(external) + 1;
+        key *= e_size;
+        key += e_size - 1;
+    }
+    // TODO: Make sure that we're under 1 << 64.
     return key;
 }
 
@@ -808,7 +809,7 @@ void process_external(state_info *si, stones_t player_target, stones_t opponent_
         if (chain) {
             stones_t external = liberties(chain, playing_area) & liberties(opponent_immortal, playing_area);
             stones_t everything_else = playing_area & ~(chain | opponent_immortal | external);
-            external &= ~liberties(everything_else, playing_area);
+            external &= ~cross(everything_else);
             if (external) {
                 si->externals[si->num_external++] = external;
             }
@@ -931,7 +932,7 @@ int main() {
 
     *s = (state) {rectangle(6, 7), WEST_WALL, 2ULL, 0, 2ULL, WEST_WALL, 0};
     init_state(s, si);
-    max_key(s);
+    max_key(s, si);
     state z_;
     state *z = &z_;
     *z = *s;
