@@ -1,3 +1,5 @@
 *.out
 *.dat
 solver
+query
+stats.txt

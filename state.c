@@ -137,6 +137,37 @@ void print_state(state *s) {
     printf("passes = %d ko_threats = %d white_to_play = %d\n", s->passes, s->ko_threats, s->white_to_play);
 }
 
+void repr_state(state *s) {
+    printf(
+        "%llu %llu %llu %llu %llu %llu %d %d %d\n",
+        s->playing_area,
+        s->player,
+        s->opponent,
+        s->ko,
+        s->target,
+        s->immortal,
+        s->passes,
+        s->ko_threats,
+        s->white_to_play
+    );
+}
+
+void sscanf_state(const char *str, state *s) {
+    sscanf(
+        str,
+        "%llu %llu %llu %llu %llu %llu %d %d %d",
+        &(s->playing_area),
+        &(s->player),
+        &(s->opponent),
+        &(s->ko),
+        &(s->target),
+        &(s->immortal),
+        &(s->passes),
+        &(s->ko_threats),
+        &(s->white_to_play)
+    );
+}
+
 int popcount(stones_t stones) {
     return __builtin_popcountll(stones);
 }

@@ -130,3 +130,65 @@ state cho535_ = cho535_537_;
 state *cho535 = &cho535_;
 cho535->player |= one(2, 1);
 cho535->opponent |= one(1, 0) | one(0, 4);
+
+state cho538_540_ = (state) {
+    rectangle(6, 6),
+    rectangle(6, 6) ^ rectangle(4, 4) ^ one(3, 3) ^ two(4, 0) ^ tvo(0, 4),
+    tvo(3, 1) | two(1, 3),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho538_540 = &cho538_540_;
+cho538_540->immortal = cho538_540->player;
+cho538_540->target = cho538_540->opponent;
+
+state cho552_ = (state) {
+    rectangle(5, 5),
+    rectangle(4, 4) ^ rectangle(3, 3) ^ one(3, 3),
+    rectangle(5, 5) ^ rectangle(4, 4),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho552 = &cho552_;
+cho552->target = cho552->player;
+cho552->immortal = cho552->opponent;
+cho552->opponent |= one(1, 1);
+
+state cho553_ = (state) {
+    rectangle(5, 6),
+    east(rectangle(4, 4) ^ rectangle(3, 3)) | one(3, 0) | one(3, 2),
+    (rectangle(5, 6) ^ rectangle(5, 5)) | two(0, 4) | one(0, 3),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho553 = &cho553_;
+cho553->target = cho553->player;
+cho553->immortal = cho553->opponent;
+
+cho553->opponent |= liberties(one(2, 1), cho553->playing_area);
+
+state cho427_ = (state) {
+    rectangle(8, 4),
+    south(south(east(rectangle(3, 1)))),
+    south(south(east(rectangle(7, 2) ^ rectangle(3, 1) ^ one(4, 0)))),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho427 = &cho427_;
+cho427->target = cho427->player;
+cho427->immortal = cho427->opponent;
+
+cho427->player |= tvo(7, 0);
+cho427->immortal |= tvo(7, 0);

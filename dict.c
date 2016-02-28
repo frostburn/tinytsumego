@@ -70,7 +70,7 @@ void resize_dict(dict *d, size_t max_key) {
 }
 
 void finalize_dict(dict *d) {
-    resize_dict(d, d->max_key);
+    // resize_dict(d, d->max_key);
     d->checkpoints = malloc(ceil_div(d->num_slots, 16) * sizeof(size_t));
     size_t checkpoint = 0;
     for (size_t i = 0; i < d->num_slots; i++) {
