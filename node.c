@@ -57,9 +57,9 @@ node_value negamax(node_value parent, node_value child) {
         parent.high_distance = DISTANCE_MAX;
     }
     assert(parent.low <= parent.high);
-    if (parent.low > VALUE_MIN){
-        assert(parent.low_distance < DISTANCE_MAX);
-    }
+    // if (parent.low > VALUE_MIN){
+    //     assert(parent.low_distance < DISTANCE_MAX);
+    // }
     return parent;
 }
 

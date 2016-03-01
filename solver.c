@@ -36,6 +36,8 @@ void save_solution(solution *sol, char *filename) {
 }
 
 // TODO: Allocations
+// TODO: Load as contiguous.
+// TOFIX: Fix and assert consistency.
 void load_solution(solution *sol, char *filename) {
     FILE *f = fopen(filename, "rb");
     size_t state_size;
@@ -46,25 +48,25 @@ void load_solution(solution *sol, char *filename) {
     assert(fread((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f));
     assert(fread((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f));
     assert(fread((void*) &(sol->num_layers), sizeof(size_t), 1, f));
-    finalize_dict(sol->d);
-    size_t min_key = 0;
-    for (size_t i = 0; i < sol->d->num_slots; i++) {
-        if (sol->d->slots[i]) {
-            for (size_t j = 0; j < 64; i++) {
-                if (test_key(sol->d, min_key)) {
-                    break;
-                }
-                else {
-                    min_key++;
-                }
-            }
-        }
-        else {
-            min_key += 64;
-        }
-    }
-    sol->d->min_key = min_key;
-    sol->d->max_key = 64 * sol->d->num_slots;
+    // finalize_dict(sol->d);
+    // size_t min_key = 0;
+    // for (size_t i = 0; i < sol->d->num_slots; i++) {
+    //     if (sol->d->slots[i]) {
+    //         for (size_t j = 0; j < 64; j++) {
+    //             if (test_key(sol->d, min_key)) {
+    //                 break;
+    //             }
+    //             else {
+    //                 min_key++;
+    //             }
+    //         }
+    //     }
+    //     else {
+    //         min_key += 64;
+    //     }
+    // }
+    // sol->d->min_key = min_key;
+    // sol->d->max_key = 64 * sol->d->num_slots;
 
     size_t num_states = num_keys(sol->d);
     // sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
@@ -211,7 +213,10 @@ int main(int argc, char *argv[]) {
         // *base_state = *cho3;
         // *base_state = *cho535;
         // *base_state = *cho535_537;
-        *base_state = *cho427;
+        // *base_state = *cho427;
+        *base_state = *rabbity;
+        // *base_state = *super_ko_seki;
+        // *base_state = *wut;
     }
     base_state->ko_threats = ko_threats;
 
@@ -293,8 +298,7 @@ int main(int argc, char *argv[]) {
     size_t key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(base_state, si, s, key, 0));
-        value_t score = liberty_score(s);
-        leaf_nodes[i] = score;
+        leaf_nodes[i] = 0;
         for (size_t k = 0; k < num_layers; k++) {
             (base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
@@ -337,16 +341,14 @@ int main(int argc, char *argv[]) {
     #ifdef CHINESE
     printf("Negamax with Chinese rules.\n");
     sol->count_prisoners = 0;
-    sol->leaf_rule = precalculated;
+    sol->leaf_rule = chinese_liberty;
     iterate(sol);
     #endif
 
-    // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed the number of stones killed.
-    // This can probably be remedied by setting the value of the stones on the board high enough compared to the stones that come later.
-    // That doesn't sit well with tablebases though.
+    // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed triple the number of stones killed.
     printf("Negamax with capture rules.\n");
     sol->count_prisoners = 1;
-    sol->leaf_rule = none;
+    sol->leaf_rule = japanese_double_liberty;
     iterate(sol);
 
     save_solution(sol, "capture.dat");
@@ -410,15 +412,14 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Negamax with Japanese rules.\n");
+    sol->count_prisoners = 1;
     sol->leaf_rule = precalculated;
     iterate(sol);
+    save_solution(sol, "japanese.dat");
 
     frontend:
     if (load_sol) {
         load_solution(sol, "japanese.dat");
-    }
-    else {
-        save_solution(sol, "japanese.dat");
     }
 
     *s = *base_state;
@@ -460,10 +461,10 @@ int main(int argc, char *argv[]) {
                 size_t child_key = to_key_s(base_state, si, child, &child_layer);
                 node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
                 if (sol->count_prisoners) {
-                    if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
+                    if (child_v.low > VALUE_MIN && child_v.low < VALUE_MAX) {
                         child_v.low = child_v.low - prisoners;
                     }
-                    if (child_v.high > -TARGET_SCORE && child_v.high < TARGET_SCORE) {
+                    if (child_v.high > VALUE_MIN && child_v.high < VALUE_MAX) {
                         child_v.high = child_v.high - prisoners;
                     }
                 }

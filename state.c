@@ -224,9 +224,10 @@ void dimensions(stones_t stones, int *width, int *height) {
     for (int i = HEIGHT - 1; i >= 0; i--) {
         if (stones & (NORTH_WALL << (i * V_SHIFT))) {
             *height = i + 1;
-            break;
+            return;
         }
     }
+    assert(0);
 }
 
 stones_t flood(register stones_t source, register stones_t target) {
@@ -270,7 +271,8 @@ stones_t cross(stones_t stones) {
         ((stones & WEST_BLOCK) << H_SHIFT) |
         ((stones >> H_SHIFT) & WEST_BLOCK) |
         (stones << V_SHIFT) |
-        (stones >> V_SHIFT)
+        (stones >> V_SHIFT) |
+        stones
     );
 }
 
@@ -292,10 +294,14 @@ int target_dead(state *s) {
     return !!(s->target & ~(s->player | s->opponent));
 }
 
-int liberty_score(state *s) {
+int chinese_liberty_score(state *s) {
     stones_t player_controlled = s->player | liberties(s->player, s->playing_area & ~s->opponent);
     stones_t opponent_controlled = s->opponent | liberties(s->opponent, s->playing_area & ~s->player);
     return popcount(player_controlled) - popcount(opponent_controlled);
+}
+
+int japanese_liberty_score(state *s) {
+    return popcount(liberties(s->player, s->playing_area & ~s->opponent)) - popcount(liberties(s->opponent, s->playing_area & ~s->player));
 }
 
 int make_move(state *s, stones_t move, int *num_kill) {
@@ -653,6 +659,11 @@ stones_t s_mirror_v(stones_t stones) {
     stones = ((stones >> (4 * V_SHIFT)) & 0x7FFFFFFULL) | ((stones & 0x7FFFFFFULL) << (4 * V_SHIFT)) | (stones & 0xFF8000000ULL);
     return ((stones >> (2 * V_SHIFT)) & 0x1FF0000001FFULL) | ((stones & 0x1FF0000001FFULL) << (2 * V_SHIFT)) | (stones & 0x3FE00FF803FE00ULL);
 }
+
+// stones_t s_mirror_v6(stones_t stones) {
+//     stones = ((stones >> (3 * V_SHIFT)) & west) | ((stones & west) << (3 * V_SHIFT));
+//     return ((stones >> (2 * V_SHIFT)) & edges) | ((stones & edges) << (2 * V_SHIFT)) | (stones & center);
+// }
 
 stones_t s_mirror_h(stones_t stones) {
     assert(WIDTH == 9);

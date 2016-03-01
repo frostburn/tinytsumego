@@ -1,6 +1,7 @@
 enum rule {
     precalculated,
-    liberty,
+    chinese_liberty,
+    japanese_double_liberty,
     none
 };
 
@@ -17,13 +18,15 @@ typedef struct solution {
     int count_prisoners;
 } solution;
 
-#define TARGET_SCORE (126)
+#define TARGET_SCORE (63)
 #define PRISONER_VALUE (1)
 
 int sign(int x) {
     return (x > 0) - (x < 0);
 }
 
+
+// TODO *sol
 int from_key_s(state *base_state, state_info *si, state *s, size_t key, size_t layer) {
     *s = *base_state;
     stones_t fixed = base_state->target | base_state->immortal;
@@ -105,8 +108,11 @@ node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int d
         if (sol->leaf_rule == none) {
             score = 0;
         }
-        else if (sol->leaf_rule == liberty) {
-            score = liberty_score(s);
+        else if (sol->leaf_rule == chinese_liberty) {
+            score = chinese_liberty_score(s);
+        }
+        else if (sol->leaf_rule == japanese_double_liberty) {
+            score = 2 * japanese_liberty_score(s);
         }
         else if (sol->leaf_rule == precalculated) {
             score = sol->leaf_nodes[key_index(sol->d, key)];
@@ -140,10 +146,11 @@ node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int d
             size_t child_key = to_key_s(sol->base_state, sol->si, child, &child_layer);
             node_value child_v = negamax_node(sol, child, child_key, child_layer, depth - 1);
             if (sol->count_prisoners) {
-                if (child_v.low > -TARGET_SCORE && child_v.low < TARGET_SCORE) {
+                // TODO: assert no overflows.
+                if (child_v.low > VALUE_MIN && child_v.low < VALUE_MAX) {
                     child_v.low = child_v.low - prisoners;
                 }
-                if (child_v.high > -TARGET_SCORE && child_v.high < TARGET_SCORE) {
+                if (child_v.high > VALUE_MIN && child_v.high < VALUE_MAX) {
                     child_v.high = child_v.high - prisoners;
                 }
             }

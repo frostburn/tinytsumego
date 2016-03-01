@@ -192,3 +192,43 @@ cho427->immortal = cho427->opponent;
 
 cho427->player |= tvo(7, 0);
 cho427->immortal |= tvo(7, 0);
+
+state rabbity_ = (state) {
+    rectangle(5, 4),
+    rectangle(4, 4) & ~(rectangle(2, 2) | south(east(rectangle(2, 2)))),
+    rectangle(2, 2) | one(1, 2),
+    0,
+    0,
+    rectangle(1, 4) << (4 * H_SHIFT)
+};
+state *rabbity = &rabbity_;
+rabbity->opponent |= rabbity->immortal;
+
+state super_ko_seki_ = (state) {
+    rectangle(4, 3),
+    two(1, 0) | one(0, 1),
+    south(east(rectangle(3, 2)))
+};
+state *super_ko_seki = &super_ko_seki_;
+super_ko_seki->target = super_ko_seki->opponent;
+
+state wut_ = (state) {
+    rectangle(5, 4) ^ one(4, 3),
+    rectangle(1, 4) | cross(one(3, 2)) | one(4, 1),
+    east(rectangle(1, 4) | rectangle(3, 1))
+};
+state *wut = &wut_;
+// wut->target = wut->opponent;
+wut->immortal = rectangle(1, 4);
+
+state rabbity2_ = (state) {
+    rectangle(5, 5),
+    tvo(2, 0) | (rectangle(5, 5) ^ rectangle(5, 4)),
+    rectangle(5, 4) ^ cross(tvo(2, 0)),
+};
+state *rabbity2 = &rabbity2_;
+stones_t im = rectangle(5, 5) ^ rectangle(5, 4) ^ one(0, 3) ^ one(4, 3);
+rabbity2->player |= im;
+rabbity2->opponent &= ~im;
+// rabbity2->target = rabbity2->opponent;
+rabbity2->immortal = im;
