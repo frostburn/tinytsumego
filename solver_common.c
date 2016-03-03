@@ -25,16 +25,14 @@ int sign(int x) {
     return (x > 0) - (x < 0);
 }
 
-
-// TODO *sol
-int from_key_s(state *base_state, state_info *si, state *s, size_t key, size_t layer) {
-    *s = *base_state;
-    stones_t fixed = base_state->target | base_state->immortal;
+int from_key_s(solution *sol, state *s, size_t key, size_t layer) {
+    *s = *(sol->base_state);
+    stones_t fixed = sol->base_state->target | sol->base_state->immortal;
     s->player &= fixed;
     s->opponent &= fixed;
     s->ko_threats -= sign(s->ko_threats) * layer;
 
-    if (!si->symmetry) {
+    if (!sol->si->color_symmetry) {
         if (key % 2) {
             stones_t temp = s->player;
             s->player = s->opponent;
@@ -44,56 +42,46 @@ int from_key_s(state *base_state, state_info *si, state *s, size_t key, size_t l
         }
         key /= 2;
     }
-    return from_key(s, si, key);
+    return from_key(s, sol->si, key);
 }
 
-int from_key_ko(state *base_state, state_info *si, state *s, size_t key, size_t layer) {
-    size_t ko_index = key % si->size;
-    key /= si->size;
-    int legal = from_key_s(base_state, si, s, key, layer);
-    s->ko = si->moves[ko_index + 1];
+int from_key_ko(solution *sol, state *s, size_t key, size_t layer) {
+    size_t ko_index = key % sol->si->size;
+    key /= sol->si->size;
+    int legal = from_key_s(sol, s, key, layer);
+    s->ko = sol->si->moves[ko_index + 1];
     if (!legal || s->ko & (s->player | s->opponent)) {
         return 0;
     }
     return 1;
 }
 
-size_t to_key_s(state *base_state, state_info *si, state *s, size_t *layer) {
-    size_t key;
-    if (si->symmetry) {
-        *layer = abs(s->ko_threats - base_state->ko_threats);
-        state c_ = *s;
-        state *c = &c_;
-        canonize(c, si);
-        key = to_key(c, si);
-        if (c->ko) {
-            int i;
-            for (i = 0; i < si->size; i++) {
-                if (c->ko == si->moves[i + 1]) {
-                    break;
-                }
-            }
-            key = si->size * key + i;
-        }
+size_t to_key_s(solution *sol, state *s, size_t *layer) {
+    state c_ = *s;
+    state *c = &c_;
+    canonize(c, sol->si);
+    size_t key = to_key(c, sol->si);
+    if (sol->si->color_symmetry) {
+        *layer = abs(c->ko_threats - sol->base_state->ko_threats);
     }
     else {
-        key = 2 * to_key(s, si);
-        if (s->white_to_play != base_state->white_to_play) {
+        key *= 2;
+        if (c->white_to_play != sol->base_state->white_to_play) {
             key += 1;
-            *layer = abs(s->ko_threats + base_state->ko_threats);
+            *layer = abs(c->ko_threats + sol->base_state->ko_threats);
         }
         else {
-            *layer = abs(s->ko_threats - base_state->ko_threats);
+            *layer = abs(c->ko_threats - sol->base_state->ko_threats);
         }
-        if (s->ko) {
-            int i;
-            for (i = 0; i < si->size; i++) {
-                if (s->ko == si->moves[i + 1]) {
-                    break;
-                }
+    }
+    if (c->ko) {
+        int i;
+        for (i = 0; i < sol->si->size; i++) {
+            if (c->ko == sol->si->moves[i + 1]) {
+                break;
             }
-            key = si->size * key + i;
         }
+        key = sol->si->size * key + i;
     }
     return key;
 }
@@ -143,7 +131,7 @@ node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int d
         int prisoners;
         if (make_move(child, move, &prisoners)) {
             size_t child_layer;
-            size_t child_key = to_key_s(sol->base_state, sol->si, child, &child_layer);
+            size_t child_key = to_key_s(sol, child, &child_layer);
             node_value child_v = negamax_node(sol, child, child_key, child_layer, depth - 1);
             if (sol->count_prisoners) {
                 // TODO: assert no overflows.

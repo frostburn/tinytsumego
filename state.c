@@ -13,9 +13,23 @@
 #define WEST_WALL (0x40201008040201ULL)
 #define WEST_BLOCK (0X3FDFEFF7FBFDFEFF)
 
-#define THREE_SLICE (0x7ULL)
-#define FOUR_SLICE (0xFULL)
-#define FIVE_SLICE (0x1FULL)
+#define H0 (NORTH_WALL)
+#define H1 (H0 << V_SHIFT)
+#define H2 (H1 << V_SHIFT)
+#define H3 (H2 << V_SHIFT)
+#define H4 (H3 << V_SHIFT)
+#define H5 (H4 << V_SHIFT)
+#define H6 (H5 << V_SHIFT)
+
+#define V0 (WEST_WALL)
+#define V1 (V0 << H_SHIFT)
+#define V2 (V1 << H_SHIFT)
+#define V3 (V2 << H_SHIFT)
+#define V4 (V3 << H_SHIFT)
+#define V5 (V4 << H_SHIFT)
+#define V6 (V5 << H_SHIFT)
+#define V7 (V6 << H_SHIFT)
+#define V8 (V7 << H_SHIFT)
 
 typedef unsigned long long int stones_t;
 
@@ -35,6 +49,8 @@ typedef struct state
 typedef struct state_info
 {
     int size;
+    int width;
+    int height;
     int num_moves;
     stones_t moves[STATE_SIZE + 1];
     int num_external;
@@ -43,7 +59,11 @@ typedef struct state_info
     size_t exponents[STATE_SIZE];
     int shifts[STATE_SIZE];
     stones_t masks[STATE_SIZE];
-    int symmetry; // 1 color, 2 mirror v/h, 3 mirror v/h/d  // TODO only v, only d, rotational?
+    int color_symmetry;
+    int mirror_v_symmetry;
+    int mirror_h_symmetry;
+    int mirror_d_symmetry;
+    // No rotational or color + spatial symmetries implemented.
 } state_info;
 
 void print_stones(stones_t stones) {
@@ -334,30 +354,35 @@ int make_move(state *s, stones_t move, int *num_kill) {
         return 0;
     }
     s->player |= move;
+    s->ko = 0;
+    // Conditionals are expensive.
+    // if (!liberties(move, s->opponent | s->player)) {
+    //     *num_kill = 0;
+    //     goto swap_players;
+    // }
     stones_t kill = 0;
     stones_t empty = s->playing_area & ~s->player;
-    stones_t chain = flood(north(move), s->opponent);
+    stones_t chain = flood(move >> V_SHIFT, s->opponent);
     if (!liberties(chain, empty) && !(chain & s->immortal)) {
         kill |= chain;
         s->opponent ^= chain;
     }
-    chain = flood(south(move), s->opponent);
+    chain = flood(move << V_SHIFT, s->opponent);
     if (!liberties(chain, empty) && !(chain & s->immortal)) {
         kill |= chain;
         s->opponent ^= chain;
     }
-    chain = flood(west(move), s->opponent);
+    chain = flood((move >> H_SHIFT) & WEST_BLOCK, s->opponent);
     if (!liberties(chain, empty) && !(chain & s->immortal)) {
         kill |= chain;
         s->opponent ^= chain;
     }
-    chain = flood(east(move), s->opponent);
+    chain = flood((move & WEST_BLOCK) << H_SHIFT, s->opponent);
     if (!liberties(chain, empty) && !(chain & s->immortal)) {
         kill |= chain;
         s->opponent ^= chain;
     }
 
-    s->ko = 0;
     *num_kill = popcount(kill);
     if (*num_kill == 1) {
         if (liberties(move, s->playing_area & ~s->opponent) == kill) {
@@ -372,6 +397,7 @@ int make_move(state *s, stones_t move, int *num_kill) {
         s->ko_threats = old_ko_threats;
         return 0;
     }
+    // swap_players:
     s->passes = 0;
     old_player = s->player;
     s->player = s->opponent;
@@ -654,21 +680,127 @@ size_t max_key(state *s, state_info *si) {
     return key;
 }
 
+#define HB3 (H0 | H1 | H2)
+#define HE7 (H0 | H4)
+#define HC7 (H1 | H3 | H5)
+
 stones_t s_mirror_v(stones_t stones) {
     assert(HEIGHT == 7);
-    stones = ((stones >> (4 * V_SHIFT)) & 0x7FFFFFFULL) | ((stones & 0x7FFFFFFULL) << (4 * V_SHIFT)) | (stones & 0xFF8000000ULL);
-    return ((stones >> (2 * V_SHIFT)) & 0x1FF0000001FFULL) | ((stones & 0x1FF0000001FFULL) << (2 * V_SHIFT)) | (stones & 0x3FE00FF803FE00ULL);
+    stones = ((stones >> (4 * V_SHIFT)) & HB3) | ((stones & HB3) << (4 * V_SHIFT)) | (stones & H3);
+    return ((stones >> (2 * V_SHIFT)) & HE7) | ((stones & HE7) << (2 * V_SHIFT)) | (stones & HC7);
 }
 
-// stones_t s_mirror_v6(stones_t stones) {
-//     stones = ((stones >> (3 * V_SHIFT)) & west) | ((stones & west) << (3 * V_SHIFT));
-//     return ((stones >> (2 * V_SHIFT)) & edges) | ((stones & edges) << (2 * V_SHIFT)) | (stones & center);
-// }
+#define HE6 (H0 | H3)
+#define HC6 (H1 | H4)
+
+stones_t s_mirror_v6(stones_t stones) {
+    stones = ((stones >> (3 * V_SHIFT)) & HB3) | ((stones & HB3) << (3 * V_SHIFT));
+    return ((stones >> (2 * V_SHIFT)) & HE6) | ((stones & HE6) << (2 * V_SHIFT)) | (stones & HC6);
+}
+
+stones_t s_mirror_v5(stones_t stones) {
+    return (
+        ((stones & H0) << (4 * V_SHIFT)) |
+        ((stones & H1) << (2 * V_SHIFT)) |
+        (stones & H2) |
+        ((stones & H3) >> (2 * V_SHIFT)) |
+        ((stones & H4) >> (4 * V_SHIFT))
+    );
+}
+
+stones_t s_mirror_v4(stones_t stones) {
+    return (
+        ((stones & H0) << (3 * V_SHIFT)) |
+        ((stones & H1) << V_SHIFT) |
+        ((stones & H2) >> V_SHIFT) |
+        ((stones & H3) >> (3 * V_SHIFT))
+    );
+}
+
+stones_t s_mirror_v3(stones_t stones) {
+    return (
+        ((stones & H0) << (2 * V_SHIFT)) |
+        (stones & H1) |
+        ((stones & H2) >> (2 * V_SHIFT))
+    );
+}
+
+stones_t s_mirror_v2(stones_t stones) {
+    return (
+        ((stones & H0) << V_SHIFT) |
+        ((stones & H1) >> V_SHIFT)
+    );
+}
+
+#define VB3 (V0 | V1 | V2)
+#define VBC3 (V3 | V4 | V5)
+#define VE9 (V0 | V3 | V6)
+#define VC9 (V1 | V4 | V7)
 
 stones_t s_mirror_h(stones_t stones) {
     assert(WIDTH == 9);
-    stones = ((stones >> 6) & 0x1C0E070381C0E07ULL) | ((stones & 0x1C0E070381C0E07ULL) << 6) | (stones & 0xE070381C0E07038ULL);
-    return ((stones >> 2) & 0x1249249249249249ULL) | ((stones & 0x1249249249249249ULL) << 2) | (stones & 0x2492492492492492ULL);
+    stones = ((stones >> 6) & VB3) | ((stones & VB3) << 6) | (stones & VBC3);
+    return ((stones >> 2) & VE9) | ((stones & VE9) << 2) | (stones & VC9);
+}
+
+#define VB4 (VB3 | V3)
+#define VBE2 (V0 | V1 | V4 | V5)
+#define VBE1 (V0 | V2 | V4 | V6)
+
+stones_t s_mirror_h8(stones_t stones) {
+    stones = ((stones >> 4) & VB4) | ((stones & VB4) << 4);
+    stones = ((stones >> 2) & VBE2) | ((stones & VBE2) << 2);
+    return ((stones >> 1) & VBE1) | ((stones & VBE1) << 1);
+}
+
+#define VE7 (V0 | V4)
+#define VC7 (V1 | V3 | V5)
+
+stones_t s_mirror_h7(stones_t stones) {
+    stones = ((stones >> 4) & VB3) | ((stones & VB3) << 4) | (stones & V3);
+    return ((stones >> 2) & VE7) | ((stones & VE7) << 2) | (stones & VC7);
+}
+
+#define VE6 (V0 | V3)
+#define VC6 (V1 | V4)
+
+stones_t s_mirror_h6(stones_t stones) {
+    stones = ((stones >> 3) & VB3) | ((stones & VB3) << 3);
+    return ((stones >> 2) & VE6) | ((stones & VE6) << 2) | (stones & VC6);
+}
+
+stones_t s_mirror_h5(stones_t stones) {
+    return (
+        ((stones & V0) << 4) |
+        ((stones & V1) << 2) |
+        (stones & V2) |
+        ((stones & V3) >> 2) |
+        ((stones & V4) >> 4)
+    );
+}
+
+stones_t s_mirror_h4(stones_t stones) {
+    return (
+        ((stones & V0) << 3) |
+        ((stones & V1) << 1) |
+        ((stones & V2) >> 1) |
+        ((stones & V3) >> 3)
+    );
+}
+
+stones_t s_mirror_h3(stones_t stones) {
+    return (
+        ((stones & V0) << 2) |
+        (stones & V1) |
+        ((stones & V2) >> 2)
+    );
+}
+
+stones_t s_mirror_h2(stones_t stones) {
+    return (
+        ((stones & V0) << 1) |
+        ((stones & V1) >> 1)
+    );
 }
 
 stones_t s_mirror_d(stones_t stones) {
@@ -697,6 +829,8 @@ void snap(state *s) {
             s->player >>= i;
             s->opponent >>= i;
             s->ko >>= i;
+            s->target >>= i;
+            s->immortal >>= i;
             break;
         }
     }
@@ -706,25 +840,117 @@ void snap(state *s) {
             s->player >>= i;
             s->opponent >>= i;
             s->ko >>= i;
+            s->target >>= i;
+            s->immortal >>= i;
             return;
         }
     }
 }
 
-void mirror_h(state *s) {
-    s->playing_area = s_mirror_h(s->playing_area);
-    s->player = s_mirror_h(s->player);
-    s->opponent = s_mirror_h(s->opponent);
-    s->ko = s_mirror_h(s->ko);
-    snap(s);
-}
-
-void mirror_v(state *s) {
+void mirror_v_full(state *s) {
     s->playing_area = s_mirror_v(s->playing_area);
     s->player = s_mirror_v(s->player);
     s->opponent = s_mirror_v(s->opponent);
     s->ko = s_mirror_v(s->ko);
+    s->target = s_mirror_v(s->target);
+    s->immortal = s_mirror_v(s->immortal);
     snap(s);
+}
+
+void mirror_h_full(state *s) {
+    s->playing_area = s_mirror_h(s->playing_area);
+    s->player = s_mirror_h(s->player);
+    s->opponent = s_mirror_h(s->opponent);
+    s->ko = s_mirror_h(s->ko);
+    s->target = s_mirror_h(s->target);
+    s->immortal = s_mirror_h(s->immortal);
+    snap(s);
+}
+
+void mirror_d_full(state *s) {
+    s->playing_area = s_mirror_d(s->playing_area);
+    s->player = s_mirror_d(s->player);
+    s->opponent = s_mirror_d(s->opponent);
+    s->ko = s_mirror_d(s->ko);
+    s->target = s_mirror_d(s->target);
+    s->immortal = s_mirror_d(s->immortal);
+    snap(s);
+}
+
+void mirror_v(state *s, state_info *si) {
+    if (si->height == 7) {
+        s->player = s_mirror_v(s->player);
+        s->opponent = s_mirror_v(s->opponent);
+        s->ko = s_mirror_v(s->ko);
+    }
+    else if (si->height == 6) {
+        s->player = s_mirror_v6(s->player);
+        s->opponent = s_mirror_v6(s->opponent);
+        s->ko = s_mirror_v6(s->ko);
+    }
+    else if (si->height == 5) {
+        s->player = s_mirror_v5(s->player);
+        s->opponent = s_mirror_v5(s->opponent);
+        s->ko = s_mirror_v5(s->ko);
+    }
+    else if (si->height == 4) {
+        s->player = s_mirror_v4(s->player);
+        s->opponent = s_mirror_v4(s->opponent);
+        s->ko = s_mirror_v4(s->ko);
+    }
+    else if (si->height == 3) {
+        s->player = s_mirror_v3(s->player);
+        s->opponent = s_mirror_v3(s->opponent);
+        s->ko = s_mirror_v3(s->ko);
+    }
+    else if (si->height == 2) {
+        s->player = s_mirror_v2(s->player);
+        s->opponent = s_mirror_v2(s->opponent);
+        s->ko = s_mirror_v2(s->ko);
+    }
+}
+
+void mirror_h(state *s, state_info *si) {
+    if (si->width == 9) {
+        s->player = s_mirror_h(s->player);
+        s->opponent = s_mirror_h(s->opponent);
+        s->ko = s_mirror_h(s->ko);
+    }
+    else if (si->width == 8) {
+        s->player = s_mirror_h8(s->player);
+        s->opponent = s_mirror_h8(s->opponent);
+        s->ko = s_mirror_h8(s->ko);
+    }
+    else if (si->width == 7) {
+        s->player = s_mirror_h7(s->player);
+        s->opponent = s_mirror_h7(s->opponent);
+        s->ko = s_mirror_h7(s->ko);
+    }
+    else if (si->width == 6) {
+        s->player = s_mirror_h6(s->player);
+        s->opponent = s_mirror_h6(s->opponent);
+        s->ko = s_mirror_h6(s->ko);
+    }
+    else if (si->width == 5) {
+        s->player = s_mirror_h5(s->player);
+        s->opponent = s_mirror_h5(s->opponent);
+        s->ko = s_mirror_h5(s->ko);
+    }
+    else if (si->width == 4) {
+        s->player = s_mirror_h4(s->player);
+        s->opponent = s_mirror_h4(s->opponent);
+        s->ko = s_mirror_h4(s->ko);
+    }
+    else if (si->width == 3) {
+        s->player = s_mirror_h3(s->player);
+        s->opponent = s_mirror_h3(s->opponent);
+        s->ko = s_mirror_h3(s->ko);
+    }
+    else if (si->width == 2) {
+        s->player = s_mirror_h2(s->player);
+        s->opponent = s_mirror_h2(s->opponent);
+        s->ko = s_mirror_h2(s->ko);
+    }
 }
 
 void mirror_d(state *s) {
@@ -749,93 +975,109 @@ int less_than(state *a, state *b) {
 }
 
 void canonize(state *s, state_info *si) {
-    if (!si->symmetry) {
-        return;
+    if (si->color_symmetry) {
+        s->white_to_play = 0;
     }
-    s->white_to_play = 0;
-    if (si->symmetry == 1) {
-        return;
-    }
+
     state temp_ = *s;
     state *temp = &temp_;
 
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
+    if (si->mirror_v_symmetry) {
+        mirror_v(temp, si);
+        if (less_than(temp, s)) {
+            *s = *temp;
+        }
     }
-    mirror_h(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
+    if (si->mirror_h_symmetry) {
+        mirror_h(temp, si);
+        if (less_than(temp, s)) {
+            *s = *temp;
+        }
+        if (si->mirror_v_symmetry) {
+            mirror_v(temp, si);
+            if (less_than(temp, s)) {
+                *s = *temp;
+            }
+        }
     }
 
-    if (si->symmetry == 2) {
-        return;
-    }
-
-    mirror_d(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
-    }
-    mirror_h(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        *s = *temp;
+    if (si->mirror_d_symmetry) {
+        mirror_d(temp);
+        if (less_than(temp, s)) {
+            *s = *temp;
+        }
+        if (si->mirror_v_symmetry) {
+            mirror_v(temp, si);
+            if (less_than(temp, s)) {
+                *s = *temp;
+            }
+        }
+        if (si->mirror_h_symmetry) {
+            mirror_h(temp, si);
+            if (less_than(temp, s)) {
+                *s = *temp;
+            }
+            if (si->mirror_v_symmetry) {
+                mirror_v(temp, si);
+                if (less_than(temp, s)) {
+                    *s = *temp;
+                }
+            }
+        }
     }
 }
 
 int is_canonical(state *s, state_info *si) {
-    if (!si->symmetry) {
-        return 1;
-    }
-    if (s->white_to_play) {
-        return 0;
+    if (si->color_symmetry) {
+        if (s->white_to_play) {
+            return 0;
+        }
     }
     state temp_ = *s;
     state *temp = &temp_;
 
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        return 0;
+    if (si->mirror_v_symmetry) {
+        mirror_v(temp, si);
+        if (less_than(temp, s)) {
+            return 0;
+        }
     }
-    mirror_h(temp);
-    if (less_than(temp, s)) {
-        return 0;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        return 0;
+    if (si->mirror_h_symmetry) {
+        mirror_h(temp, si);
+        if (less_than(temp, s)) {
+            return 0;
+        }
+        if (si->mirror_v_symmetry) {
+            mirror_v(temp, si);
+            if (less_than(temp, s)) {
+                return 0;
+            }
+        }
     }
 
-    if (si->symmetry == 2) {
-        return 1;
-    }
-
-    mirror_d(temp);
-    if (less_than(temp, s)) {
-        return 0;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        return 0;
-    }
-    mirror_h(temp);
-    if (less_than(temp, s)) {
-        return 0;
-    }
-    mirror_v(temp);
-    if (less_than(temp, s)) {
-        return 0;
+    if (si->mirror_d_symmetry) {
+        mirror_d(temp);
+        if (less_than(temp, s)) {
+            return 0;;
+        }
+        if (si->mirror_v_symmetry) {
+            mirror_v(temp, si);
+            if (less_than(temp, s)) {
+                return 0;;
+            }
+        }
+        if (si->mirror_h_symmetry) {
+            mirror_h(temp, si);
+            if (less_than(temp, s)) {
+                return 0;;
+            }
+            if (si->mirror_v_symmetry) {
+                mirror_v(temp, si);
+                if (less_than(temp, s)) {
+                    return 0;;
+                }
+            }
+        }
     }
     return 1;
 }
@@ -864,6 +1106,8 @@ void init_state(state *s, state_info *si) {
     assert(!(~s->playing_area & (s->player | s->opponent | s->ko | s->target | s->immortal)));
     assert(!(s->player & s->opponent));
     assert(!((s->player | s->opponent) & s->ko));
+
+    dimensions(s->playing_area, &(si->width), &(si->height));
 
     stones_t open = s->playing_area & ~(s->target | s->immortal);
     si->num_moves = 1;
@@ -916,24 +1160,18 @@ void init_state(state *s, state_info *si) {
             si->shifts[si->num_blocks++] = i;
         }
     }
-    if (s->target | s->immortal) {
-        si->symmetry = 0;
-    }
-    else {
-        si->symmetry = 1;
-        state temp_ = *s;
-        state *temp = &temp_;
-        mirror_v(temp);
-        if (s->playing_area == temp->playing_area) {
-            mirror_h(temp);
-            if (s->playing_area == temp->playing_area) {
-                si->symmetry = 2;
-                if (s->playing_area == s_mirror_d(s->playing_area)) {
-                    si->symmetry = 3;
-                }
-            }
-        }
-    }
+    si->color_symmetry = !(s->target | s->immortal);
+    state temp_;
+    state *temp = &temp_;
+    *temp = *s;
+    mirror_v_full(temp);
+    si->mirror_v_symmetry = (s->playing_area == temp->playing_area && s->target == temp->target && s->immortal == temp->immortal);
+    *temp = *s;
+    mirror_h_full(temp);
+    si->mirror_h_symmetry = (s->playing_area == temp->playing_area && s->target == temp->target && s->immortal == temp->immortal);
+    *temp = *s;
+    mirror_d_full(temp);
+    si->mirror_d_symmetry = (s->playing_area == temp->playing_area && s->target == temp->target && s->immortal == temp->immortal);
 }
 
 #ifndef MAIN

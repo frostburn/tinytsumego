@@ -232,3 +232,10 @@ rabbity2->player |= im;
 rabbity2->opponent &= ~im;
 // rabbity2->target = rabbity2->opponent;
 rabbity2->immortal = im;
+
+state test_ = (state) {
+    rectangle(3, 2),
+    rectangle(1, 2)
+};
+state *test = &test_;
+test->immortal = test->player;

@@ -94,11 +94,11 @@ void iterate(solution *sol) {
             size_t key = sol->d->min_key;
             for (size_t i = 0; i < num_states + sol->ko_ld->num_keys; i++) {
                 if (i < num_states) {
-                    assert(from_key_s(sol->base_state, sol->si, s, key, j));
+                    assert(from_key_s(sol, s, key, j));
                 }
                 else {
                     key = sol->ko_ld->keys[i - num_states];
-                    assert(from_key_ko(sol->base_state, sol->si, s, key, j));
+                    assert(from_key_ko(sol, s, key, j));
                 }
                 node_value new_v = negamax_node(sol, s, key, j, 1);
                 if (i < num_states) {
@@ -115,7 +115,7 @@ void iterate(solution *sol) {
             }
         }
         size_t base_layer;
-        size_t base_key = to_key_s(sol->base_state, sol->si, sol->base_state, &base_layer);
+        size_t base_key = to_key_s(sol, sol->base_state, &base_layer);
         print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
         save_solution(sol, "temp.dat");
     }
@@ -138,7 +138,7 @@ void endstate(solution *sol, state *s, node_value parent_v, int turn, int low_pl
         int prisoners;
         if (make_move(child, move, &prisoners)) {
             size_t child_layer;
-            size_t child_key = to_key_s(sol->base_state, sol->si, child, &child_layer);
+            size_t child_key = to_key_s(sol, child, &child_layer);
             node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
             node_value child_v_p = child_v;
             if (sol->count_prisoners) {
@@ -217,6 +217,7 @@ int main(int argc, char *argv[]) {
         *base_state = *rabbity;
         // *base_state = *super_ko_seki;
         // *base_state = *wut;
+        // *base_state = *test;
     }
     base_state->ko_threats = ko_threats;
 
@@ -226,7 +227,7 @@ int main(int argc, char *argv[]) {
     init_state(base_state, si);
 
     size_t num_layers;
-    if (si->symmetry) {
+    if (si->color_symmetry) {
         num_layers = 2 * abs(base_state->ko_threats) + 1;
     }
     else {
@@ -237,6 +238,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < si->num_external; i++) {
         print_stones(si->externals[i]);
     }
+    printf(
+        "width=%d height=%d c=%d v=%d h=%d d=%d\n",
+        si->width,
+        si->height,
+        si->color_symmetry,
+        si->mirror_v_symmetry,
+        si->mirror_h_symmetry,
+        si->mirror_d_symmetry
+    );
+
     state s_;
     state *s = &s_;
 
@@ -251,7 +262,7 @@ int main(int argc, char *argv[]) {
     sol->num_layers = num_layers;
 
     size_t max_k = max_key(base_state, si);
-    if (!si->symmetry) {
+    if (!si->color_symmetry) {
         max_k *= 2;
     }
     init_dict(d, max_k);
@@ -260,12 +271,12 @@ int main(int argc, char *argv[]) {
 
     size_t total_legal = 0;
     for (size_t k = 0; k < max_k; k++) {
-        if (!from_key_s(base_state, si, s, k, 0)){
+        if (!from_key_s(sol, s, k, 0)){
             continue;
         }
         total_legal++;
         size_t layer;
-        size_t key = to_key_s(base_state, si, s, &layer);
+        size_t key = to_key_s(sol, s, &layer);
         assert(layer == 0);
         add_key(d, key);
         if (key > key_max) {
@@ -297,7 +308,7 @@ int main(int argc, char *argv[]) {
     size_t child_key;
     size_t key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(base_state, si, s, key, 0));
+        assert(from_key_s(sol, s, key, 0));
         leaf_nodes[i] = 0;
         for (size_t k = 0; k < num_layers; k++) {
             (base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
@@ -311,7 +322,7 @@ int main(int argc, char *argv[]) {
                 }
                 if (child->ko) {
                     size_t child_layer;
-                    child_key = to_key_s(base_state, si, child, &child_layer);
+                    child_key = to_key_s(sol, child, &child_layer);
                     add_lin_key(ko_ld, child_key);
                 }
             }
@@ -359,7 +370,7 @@ int main(int argc, char *argv[]) {
     state *new_s = &new_s_;
     key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(base_state, si, s, key, zero_layer));
+        assert(from_key_s(sol, s, key, zero_layer));
 
         *new_s = *s;
         endstate(sol, new_s, base_nodes[zero_layer][i], 0, 1);
@@ -432,7 +443,7 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         size_t layer;
-        size_t key = to_key_s(base_state, si, s, &layer);
+        size_t key = to_key_s(sol, s, &layer);
         node_value v = negamax_node(sol, s, key, layer, 0);
         print_state(s);
         if (turn) {
@@ -458,7 +469,7 @@ int main(int argc, char *argv[]) {
             int prisoners;
             if (make_move(child, move, &prisoners)) {
                 size_t child_layer;
-                size_t child_key = to_key_s(base_state, si, child, &child_layer);
+                size_t child_key = to_key_s(sol, child, &child_layer);
                 node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
                 if (sol->count_prisoners) {
                     if (child_v.low > VALUE_MIN && child_v.low < VALUE_MAX) {
