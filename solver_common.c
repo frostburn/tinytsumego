@@ -25,6 +25,47 @@ int sign(int x) {
     return (x > 0) - (x < 0);
 }
 
+void save_solution(solution *sol, FILE *f) {
+    fwrite((void*) sol, sizeof(solution), 1, f);
+    fwrite((void*) sol->base_state, sizeof(state), 1, f);
+    save_dict(sol->d, f);
+    save_lin_dict(sol->ko_ld, f);
+    size_t num_states = num_keys(sol->d);
+    for (int i = 0;i < sol->num_layers; i++) {
+        fwrite((void*) sol->base_nodes[i], sizeof(node_value), num_states, f);
+        fwrite((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f);
+    }
+    fwrite((void*) sol->leaf_nodes, sizeof(value_t), num_states, f);
+}
+
+char* load_solution(solution *sol, char *buffer, int do_alloc) {
+    *sol = *((solution*) buffer);
+    buffer += sizeof(solution);
+    if (do_alloc) {
+        sol->base_state = malloc(sizeof(state));
+        sol->si = malloc(sizeof(state_info));
+        sol->d = (dict*) malloc(sizeof(dict));
+        sol->ko_ld = (lin_dict*) malloc(sizeof(lin_dict));
+        sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
+        sol->ko_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
+    }
+    *(sol->base_state) = *((state*) buffer);
+    buffer += sizeof(state);
+    init_state(sol->base_state, sol->si);
+    buffer = load_dict(sol->d, buffer);
+    buffer = load_lin_dict(sol->ko_ld, buffer);
+    size_t num_states = num_keys(sol->d);
+    for (int i = 0;i < sol->num_layers; i++) {
+        sol->base_nodes[i] = (node_value*) buffer;
+        buffer += num_states * sizeof(node_value);
+        sol->ko_nodes[i] = (node_value*) buffer;
+        buffer += sol->ko_ld->num_keys * sizeof(node_value);
+    }
+    sol->leaf_nodes = (value_t*) buffer;
+    buffer += num_states * sizeof(value_t);
+    return buffer;
+}
+
 int from_key_s(solution *sol, state *s, size_t key, size_t layer) {
     *s = *(sol->base_state);
     stones_t fixed = sol->base_state->target | sol->base_state->immortal;

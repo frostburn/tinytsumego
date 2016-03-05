@@ -11,81 +11,30 @@
 #include "node.c"
 #include "solver_common.c"
 
-solution* mmap_solution(char *filename) {
-    solution *sol = (solution*) malloc(sizeof(solution));
-    sol->d = (dict*) malloc(sizeof(dict));
-    sol->ko_ld = (lin_dict*) malloc(sizeof(lin_dict));
+char* file_to_mmap(char *filename) {
     struct stat sb;
     stat(filename, &sb);
     int fd = open(filename, O_RDONLY);
     assert(fd != -1);
-    char *map, *rp;
-    map = rp = mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    char *map;
+    map = (char*) mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
     madvise(map, sb.st_size, MADV_RANDOM);
-    size_t state_size = *((size_t*) rp);
-    assert(state_size == sizeof(state));
-    rp += sizeof(size_t);
-    sol->base_state = (state*) rp;
-    rp += state_size;
-    sol->d->num_slots = *((size_t*) rp);
-    rp += sizeof(size_t);
-    sol->d->slots = (slot_t*) rp;
-    rp += sol->d->num_slots * sizeof(slot_t);
-    sol->ko_ld->num_keys = *((size_t*) rp);
-    rp += sizeof(size_t);
-    sol->ko_ld->keys = (size_t*) rp;
-    rp += sol->ko_ld->num_keys * sizeof(size_t);
-    sol->num_layers = *((size_t*) rp);
-    rp += sizeof(size_t);
-    finalize_dict(sol->d);
-    size_t min_key = 0;
-    for (size_t i = 0; i < sol->d->num_slots; i++) {
-        if (sol->d->slots[i]) {
-            for (size_t j = 0; j < 64; i++) {
-                if (test_key(sol->d, min_key)) {
-                    break;
-                }
-                else {
-                    min_key++;
-                }
-            }
-        }
-        else {
-            min_key += 64;
-        }
-    }
-    sol->d->min_key = min_key;
-    sol->d->max_key = 64 * sol->d->num_slots;
+    return map;
+}
 
-    size_t num_states = num_keys(sol->d);
-    sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
-    sol->ko_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
-    for (int i = 0;i < sol->num_layers; i++) {
-        sol->base_nodes[i] = (node_value*) rp;
-        rp += num_states * sizeof(node_value);
-        sol->ko_nodes[i] = (node_value*) rp;
-        rp += sol->ko_ld->num_keys * sizeof(node_value);
-    }
-    sol->leaf_nodes = (value_t*) rp;
-    rp += num_states * sizeof(value_t);
-    sol->leaf_rule = *((enum rule*) rp);
-    rp += sizeof(enum rule);
-    sol->count_prisoners = *((int*) rp);
-    rp += sizeof(int);
-    // TODO: Unmap the file.
-
-    sol->si = (state_info*) malloc(sizeof(state_info));;
-    init_state(sol->base_state, sol->si);
-
+solution* mmap_solution(char *filename) {
+    solution *sol = (solution*) malloc(sizeof(solution));
+    char *buffer = file_to_mmap(filename);
+    buffer = load_solution(sol, buffer, 1);
     return sol;
 }
 
-#define NUM_SOLUTIONS (2)
+#define NUM_SOLUTIONS (1)
 
 int main() {
     solution* sols[NUM_SOLUTIONS];
     sols[0] = mmap_solution("4x3_japanese.dat");
-    sols[1] = mmap_solution("4x4_japanese.dat");
+    // sols[1] = mmap_solution("4x4_japanese.dat");
     // for (int i = 0; i < NUM_SOLUTIONS; i++) {
     //     repr_state(sols[i]->base_state);
     // }
@@ -112,7 +61,7 @@ int main() {
                 (sols[i]->base_state->immortal == s->immortal)
             ) {
                 size_t layer;
-                size_t key = to_key_s(sols[i]->base_state, sols[i]->si, s, &layer);
+                size_t key = to_key_s(sols[i], s, &layer);
                 node_value v = negamax_node(sols[i], s, key, layer, 0);
                 printf("%d %d %d %d\n", v.low, v.high, v.low_distance, v.high_distance);
 
@@ -123,7 +72,7 @@ int main() {
                     stones_t move = sols[i]->si->moves[j];
                     if (make_move(child, move, &prisoners)) {
                         size_t child_layer;
-                        size_t child_key = to_key_s(sols[i]->base_state, sols[i]->si, child, &child_layer);
+                        size_t child_key = to_key_s(sols[i], child, &child_layer);
                         node_value child_v = negamax_node(sols[i], child, child_key, child_layer, 0);
                         child_moves[num_values] = move;
                         child_values[num_values++] = child_v;

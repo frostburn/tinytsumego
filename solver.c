@@ -14,71 +14,14 @@
 // Where's the makefile? Oh, you gotta be kidding me.
 // gcc -std=gnu99 -Wall -O3 solver.c -o solver; solver 4 3
 
-void save_solution(solution *sol, char *filename) {
-    FILE *f = fopen(filename, "wb");
-    size_t state_size = sizeof(state);
-    fwrite((void*) &state_size, sizeof(size_t), 1, f);
-    fwrite((void*) sol->base_state, state_size, 1, f);
-    fwrite((void*) &(sol->d->num_slots), sizeof(size_t), 1, f);
-    fwrite((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f);
-    fwrite((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f);
-    fwrite((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f);
-    fwrite((void*) &(sol->num_layers), sizeof(size_t), 1, f);
-    size_t num_states = num_keys(sol->d);
-    for (int i = 0;i < sol->num_layers; i++) {
-        fwrite((void*) sol->base_nodes[i], sizeof(node_value), num_states, f);
-        fwrite((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f);
-    }
-    fwrite((void*) sol->leaf_nodes, sizeof(value_t), num_states, f);
-    fwrite((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f);
-    fwrite((void*) &(sol->count_prisoners), sizeof(int), 1, f);
-    fclose(f);
-}
-
-// TODO: Allocations
-// TODO: Load as contiguous.
-// TOFIX: Fix and assert consistency.
-void load_solution(solution *sol, char *filename) {
+char* file_to_buffer(char *filename) {
+    struct stat sb;
+    stat(filename, &sb);
+    char *buffer = (char*) malloc(sb.st_size * sizeof(char));
     FILE *f = fopen(filename, "rb");
-    size_t state_size;
-    assert(fread((void*) &state_size, sizeof(size_t), 1, f));
-    assert(fread((void*) sol->base_state, state_size, 1, f));
-    assert(fread((void*) &(sol->d->num_slots), sizeof(size_t), 1, f));
-    assert(fread((void*) sol->d->slots, sizeof(slot_t), sol->d->num_slots, f));
-    assert(fread((void*) &(sol->ko_ld->num_keys), sizeof(size_t), 1, f));
-    assert(fread((void*) sol->ko_ld->keys, sizeof(size_t), sol->ko_ld->num_keys, f));
-    assert(fread((void*) &(sol->num_layers), sizeof(size_t), 1, f));
-    // finalize_dict(sol->d);
-    // size_t min_key = 0;
-    // for (size_t i = 0; i < sol->d->num_slots; i++) {
-    //     if (sol->d->slots[i]) {
-    //         for (size_t j = 0; j < 64; j++) {
-    //             if (test_key(sol->d, min_key)) {
-    //                 break;
-    //             }
-    //             else {
-    //                 min_key++;
-    //             }
-    //         }
-    //     }
-    //     else {
-    //         min_key += 64;
-    //     }
-    // }
-    // sol->d->min_key = min_key;
-    // sol->d->max_key = 64 * sol->d->num_slots;
-
-    size_t num_states = num_keys(sol->d);
-    // sol->base_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
-    // sol->ko_nodes = (node_value**) malloc(sizeof(node_value*) * sol->num_layers);
-    for (int i = 0;i < sol->num_layers; i++) {
-        assert(fread((void*) sol->base_nodes[i], sizeof(node_value), num_states, f));
-        assert(fread((void*) sol->ko_nodes[i], sizeof(node_value), sol->ko_ld->num_keys, f));
-    }
-    assert(fread((void*) sol->leaf_nodes, sizeof(value_t), num_states, f));
-    assert(fread((void*) &(sol->leaf_rule), sizeof(enum rule), 1, f));
-    assert(fread((void*) &(sol->count_prisoners), sizeof(int), 1, f));
+    assert(fread((void*) buffer, sizeof(char), sb.st_size, f));
     fclose(f);
+    return buffer;
 }
 
 void iterate(solution *sol) {
@@ -117,7 +60,13 @@ void iterate(solution *sol) {
         size_t base_layer;
         size_t base_key = to_key_s(sol, sol->base_state, &base_layer);
         print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
-        save_solution(sol, "temp.dat");
+
+        FILE *f = fopen("temp.dat", "wb");
+        save_solution(sol, f);
+        fclose(f);
+        // Verify solution integrity. For debugging only. Leaks memory.
+        // char *buffer = file_to_buffer("temp.dat");
+        // buffer = load_solution(sol, buffer, 0);
     }
 }
 
@@ -261,16 +210,22 @@ int main(int argc, char *argv[]) {
     sol->d = d;
     sol->num_layers = num_layers;
 
-    size_t max_k = max_key(base_state, si);
-    if (!si->color_symmetry) {
-        max_k *= 2;
-    }
-    init_dict(d, max_k);
+    // Re-used at frontend. TODO: Allocate a different pointer.
+    state child_;
+    state *child = &child_;
 
-    size_t key_max = 0;
+    if (load_sol) {
+        goto frontend;
+    }
+
+    size_t k_size = key_size(si);
+    if (!si->color_symmetry) {
+        k_size *= 2;
+    }
+    init_dict(d, k_size);
 
     size_t total_legal = 0;
-    for (size_t k = 0; k < max_k; k++) {
+    for (size_t k = 0; k < k_size; k++) {
         if (!from_key_s(sol, s, k, 0)){
             continue;
         }
@@ -279,11 +234,7 @@ int main(int argc, char *argv[]) {
         size_t key = to_key_s(sol, s, &layer);
         assert(layer == 0);
         add_key(d, key);
-        if (key > key_max) {
-            key_max = key;
-        }
     }
-    resize_dict(d, key_max);
     finalize_dict(d);
     size_t num_states = num_keys(d);
 
@@ -303,15 +254,13 @@ int main(int argc, char *argv[]) {
     sol->leaf_nodes = leaf_nodes;
     sol->ko_ld = ko_ld;
 
-    state child_;
-    state *child = &child_;
     size_t child_key;
     size_t key = d->min_key;
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(sol, s, key, 0));
-        leaf_nodes[i] = 0;
+        sol->leaf_nodes[i] = 0;
         for (size_t k = 0; k < num_layers; k++) {
-            (base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+            (sol->base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
         for (int j = 0; j < STATE_SIZE; j++) {
             *child = *s;
@@ -335,18 +284,14 @@ int main(int argc, char *argv[]) {
     node_value **ko_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
     sol->ko_nodes = ko_nodes;
     for (size_t i = 0; i < num_layers; i++) {
-        ko_nodes[i] = (node_value*) malloc(ko_ld->num_keys * sizeof(node_value));
+        sol->ko_nodes[i] = (node_value*) malloc(ko_ld->num_keys * sizeof(node_value));
     }
     printf("Unique positions with ko %zu\n", ko_ld->num_keys);
 
     for (size_t i = 0; i < ko_ld->num_keys; i++) {
         for (size_t k = 0; k < num_layers; k++) {
-            ko_nodes[k][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+            sol->ko_nodes[k][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
-    }
-
-    if (load_sol) {
-        goto frontend;
     }
 
     #ifdef CHINESE
@@ -362,10 +307,12 @@ int main(int argc, char *argv[]) {
     sol->leaf_rule = japanese_double_liberty;
     iterate(sol);
 
-    save_solution(sol, "capture.dat");
+    FILE *f = fopen("capture.dat", "wb");
+    save_solution(sol, f);
+    fclose(f);
 
     // Japanese leaf state calculation.
-    size_t zero_layer = abs(base_state->ko_threats);
+    size_t zero_layer = abs(sol->base_state->ko_threats);
     state new_s_;
     state *new_s = &new_s_;
     key = d->min_key;
@@ -373,8 +320,9 @@ int main(int argc, char *argv[]) {
         assert(from_key_s(sol, s, key, zero_layer));
 
         *new_s = *s;
-        endstate(sol, new_s, base_nodes[zero_layer][i], 0, 1);
+        endstate(sol, new_s, sol->base_nodes[zero_layer][i], 0, 1);
 
+        // TOFIX: Treat nakade as alive so that partially dead nakade won't give extra territory.
         stones_t player_alive = s->player & new_s->player;
         stones_t opponent_alive = s->opponent & new_s->opponent;
 
@@ -407,7 +355,7 @@ int main(int argc, char *argv[]) {
             score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
         }
 
-        leaf_nodes[i] = score;
+        sol->leaf_nodes[i] = score;
 
         key = next_key(d, key);
     }
@@ -415,10 +363,10 @@ int main(int argc, char *argv[]) {
     // Clear the rest of the tree.
     for (size_t j = 0; j < num_layers; j++) {
         for (size_t i = 0; i < num_states; i++) {
-            base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+            sol->base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
         for (size_t i = 0; i < ko_ld->num_keys; i++) {
-            ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+            sol->ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
     }
 
@@ -426,14 +374,18 @@ int main(int argc, char *argv[]) {
     sol->count_prisoners = 1;
     sol->leaf_rule = precalculated;
     iterate(sol);
-    save_solution(sol, "japanese.dat");
+
+    f = fopen("japanese.dat", "wb");
+    save_solution(sol, f);
+    fclose(f);
 
     frontend:
     if (load_sol) {
-        load_solution(sol, "japanese.dat");
+        char *buffer = file_to_buffer("japanese.dat");
+        buffer = load_solution(sol, buffer, 1);
     }
 
-    *s = *base_state;
+    *s = *sol->base_state;
 
     char coord1;
     int coord2;
@@ -531,72 +483,6 @@ int main(int argc, char *argv[]) {
             turn = !turn;
         }
     }
-
-    /*
-    char dir_name[16];
-    sprintf(dir_name, "%dx%d", width, height);
-    struct stat sb;
-    if (stat(dir_name, &sb) == -1) {
-        mkdir(dir_name, 0700);
-    }
-    assert(chdir(dir_name) == 0);
-    FILE *f;
-
-    #ifndef PRELOAD
-    f = fopen("d_slots.dat", "wb");
-    fwrite((void*) d->slots, sizeof(slot_t), d->num_slots, f);
-    fclose(f);
-    f = fopen("d_checkpoints.dat", "wb");
-    fwrite((void*) d->checkpoints, sizeof(size_t), (d->num_slots >> 4) + 1, f);
-    fclose(f);
-    f = fopen("ko_ld_keys.dat", "wb");
-    fwrite((void*) ko_ld->keys, sizeof(size_t), ko_ld->num_keys, f);
-    fclose(f);
-
-    f = fopen("base_nodes.dat", "wb");
-    fwrite((void*) base_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("pass_nodes.dat", "wb");
-    fwrite((void*) pass_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("leaf_nodes.dat", "wb");
-    fwrite((void*) leaf_nodes, sizeof(value_t), num_states, f);
-    fclose(f);
-    f = fopen("ko_nodes.dat", "wb");
-    fwrite((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
-    fclose(f);
-    #endif
-
-    #ifdef PRELOAD
-    f = fopen("base_nodes.dat", "rb");
-    fread((void*) base_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("pass_nodes.dat", "rb");
-    fread((void*) pass_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("leaf_nodes.dat", "rb");
-    fread((void*) leaf_nodes, sizeof(value_t), num_states, f);
-    fclose(f);
-    f = fopen("ko_nodes.dat", "rb");
-    fread((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
-    fclose(f);
-    #endif
-    */
-
-    /*
-    f = fopen("base_nodes_j.dat", "wb");
-    fwrite((void*) base_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("pass_nodes_j.dat", "wb");
-    fwrite((void*) pass_nodes, sizeof(node_value), num_states, f);
-    fclose(f);
-    f = fopen("leaf_nodes_j.dat", "wb");
-    fwrite((void*) leaf_nodes, sizeof(value_t), num_states, f);
-    fclose(f);
-    f = fopen("ko_nodes_j.dat", "wb");
-    fwrite((void*) ko_nodes, sizeof(node_value), ko_ld->num_keys, f);
-    fclose(f);
-    */
 
     return 0;
 }

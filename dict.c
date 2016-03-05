@@ -52,16 +52,16 @@ int popcountll(slot_t slot) {
     return __builtin_popcountll(slot);
 }
 
-void init_dict(dict *d, size_t max_key) {
-    size_t num_slots = ceil_div(max_key, 64);
+void init_dict(dict *d, size_t key_size) {
+    size_t num_slots = ceil_div(key_size, 64);
     d->slots = (slot_t*) calloc(num_slots, sizeof(slot_t));
     d->num_slots = num_slots;
     d->min_key = ~0ULL;
     d->max_key = 0ULL;
 }
 
-void resize_dict(dict *d, size_t max_key) {
-    size_t num_slots = ceil_div(max_key, 64);
+void resize_dict(dict *d, size_t key_size) {
+    size_t num_slots = ceil_div(key_size, 64);
     d->slots = (slot_t*) realloc(d->slots, sizeof(slot_t) * num_slots);
     if (num_slots > d->num_slots) {
         memset(d->slots + d->num_slots, 0, (num_slots - d->num_slots) * sizeof(slot_t));
@@ -70,7 +70,7 @@ void resize_dict(dict *d, size_t max_key) {
 }
 
 void finalize_dict(dict *d) {
-    // resize_dict(d, d->max_key);
+    resize_dict(d, d->max_key + 1);
     d->checkpoints = malloc(ceil_div(d->num_slots, 16) * sizeof(size_t));
     size_t checkpoint = 0;
     for (size_t i = 0; i < d->num_slots; i++) {
@@ -136,6 +136,24 @@ size_t num_keys(dict *d) {
         num += popcountll(d->slots[i]);
     }
     return num;
+}
+
+void save_dict(dict *d, FILE *f) {
+    fwrite((void*) d, sizeof(dict), 1, f);
+    fwrite((void*) d->slots, sizeof(slot_t), d->num_slots, f);
+    size_t num_checkpoints = ceil_div(d->num_slots, 16);
+    fwrite((void*) d->checkpoints, sizeof(size_t), num_checkpoints, f);
+}
+
+char* load_dict(dict *d, char *buffer) {
+    *d = *((dict*) buffer);
+    buffer += sizeof(dict);
+    d->slots = (slot_t*) buffer;
+    buffer += d->num_slots * sizeof(slot_t);
+    size_t num_checkpoints = ceil_div(d->num_slots, 16);
+    d->checkpoints = (size_t*) buffer;
+    buffer += num_checkpoints * sizeof(size_t);
+    return buffer;
 }
 
 void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t key_size, size_t g_constant) {
@@ -251,6 +269,19 @@ void finalize_lin_dict(lin_dict *ld) {
     ld->num_keys -= lag;
     ld->sorted_size = ld->num_keys;
     ld->keys = (size_t*) realloc(ld->keys, sizeof(size_t) * ld->num_keys);
+}
+
+void save_lin_dict(lin_dict *ld, FILE *f) {
+    fwrite((void*) ld, sizeof(lin_dict), 1, f);
+    fwrite((void*) ld->keys, sizeof(size_t), ld->num_keys, f);
+}
+
+char* load_lin_dict(lin_dict *ld, char *buffer) {
+    *ld = *((lin_dict*) buffer);
+    buffer += sizeof(lin_dict);
+    ld->keys = (size_t*) buffer;
+    buffer += ld->num_keys * sizeof(size_t);
+    return buffer;
 }
 
 void* btree_get(vertex *root, int depth, size_t key) {
