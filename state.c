@@ -474,108 +474,6 @@ int is_legal(state *s) {
 }
 */
 
-// Is the state a legal position for atari go starting from an empty position.
-int is_atari_legal(state *s) {
-    stones_t p;
-    stones_t chain;
-    stones_t player = s->player;
-    stones_t opponent = s->opponent;
-    int player_popcount = popcount(player);
-    int opponent_popcount = popcount(opponent);
-    // Check for alternating play
-    if (player_popcount > opponent_popcount) {
-        return 0;
-    }
-    if (opponent_popcount > player_popcount + 1) {
-        return 0;
-    }
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j + 1 < HEIGHT; j += 2) {
-            p = (1ULL | (1ULL << V_SHIFT)) << (i + j * V_SHIFT);
-            chain = flood(p, player);
-            player ^= chain;
-            if (chain && !liberties(chain, s->playing_area & ~s->opponent)) {
-                return 0;
-            }
-            chain = flood(p, opponent);
-            opponent ^= chain;
-            if (!chain) {
-                continue;
-            }
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (!(libs & (libs - 1))) {
-                // Illegal or there is a stone that can be captured.
-                return 0;
-            }
-        }
-        if (!(player | opponent)) {
-            return 1;
-        }
-    }
-    if (HEIGHT % 2) {
-        for (int i = 0; i < WIDTH ; i += 2) {
-            p = 3ULL << (i + (HEIGHT - 1) * V_SHIFT);  // Assumes that end bits don't matter.
-            chain = flood(p, player);
-            player ^= chain;
-            if (chain && !liberties(chain, s->playing_area & ~s->opponent)) {
-                return 0;
-            }
-            chain = flood(p, opponent);
-            opponent ^= chain;
-            if (!chain) {
-                continue;
-            }
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (!(libs & (libs - 1))) {
-                // Illegal or there is a stone that can be captured.
-                return 0;
-            }
-        }
-    }
-    return 1;
-}
-
-// Preleaves can be treated as leaves because the final move is obvious.
-int is_atari_preleaf(state *s) {
-    stones_t p;
-    stones_t chain;
-    stones_t opponent = s->opponent;
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j + 1 < HEIGHT; j += 2) {
-            p = (1ULL | (1ULL << V_SHIFT)) << (i + j * V_SHIFT);
-            chain = flood(p, opponent);
-            if (!chain) {
-                continue;
-            }
-            opponent ^= chain;
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (libs && !(libs & (libs - 1))) {
-                // There is a stone that can be captured.
-                return 1;
-            }
-        }
-        if (!opponent) {
-            return 0;
-        }
-    }
-    if (HEIGHT % 2) {
-        for (int i = 0; i < WIDTH ; i += 2) {
-            p = 3ULL << (i + (HEIGHT - 1) * V_SHIFT);  // Assumes that end bits don't matter.
-            chain = flood(p, opponent);
-            if (!chain) {
-                continue;
-            }
-            opponent ^= chain;
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (libs && !(libs & (libs - 1))) {
-                // There is a stone that can be captured.
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
 static stones_t PLAYER_BLOCKS[243] = {0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 6, 4, 5, 4, 0, 1, 0, 2, 3, 2, 0, 1, 0, 8, 9, 8, 10, 11, 10, 8, 9, 8, 12, 13, 12, 14, 15, 14, 12, 13, 12, 8, 9, 8, 10, 11, 10, 8, 9, 8, 0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 6, 4, 5, 4, 0, 1, 0, 2, 3, 2, 0, 1, 0, 16, 17, 16, 18, 19, 18, 16, 17, 16, 20, 21, 20, 22, 23, 22, 20, 21, 20, 16, 17, 16, 18, 19, 18, 16, 17, 16, 24, 25, 24, 26, 27, 26, 24, 25, 24, 28, 29, 28, 30, 31, 30, 28, 29, 28, 24, 25, 24, 26, 27, 26, 24, 25, 24, 16, 17, 16, 18, 19, 18, 16, 17, 16, 20, 21, 20, 22, 23, 22, 20, 21, 20, 16, 17, 16, 18, 19, 18, 16, 17, 16, 0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 6, 4, 5, 4, 0, 1, 0, 2, 3, 2, 0, 1, 0, 8, 9, 8, 10, 11, 10, 8, 9, 8, 12, 13, 12, 14, 15, 14, 12, 13, 12, 8, 9, 8, 10, 11, 10, 8, 9, 8, 0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 6, 4, 5, 4, 0, 1, 0, 2, 3, 2, 0, 1, 0};
 static stones_t OPPONENT_BLOCKS[243] = {0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 24, 24, 25, 24, 24, 25, 26, 26, 27, 24, 24, 25, 24, 24, 25, 26, 26, 27, 28, 28, 29, 28, 28, 29, 30, 30, 31};
 static size_t BLOCK_KEYS[32] = {0, 1, 3, 4, 9, 10, 12, 13, 27, 28, 30, 31, 36, 37, 39, 40, 81, 82, 84, 85, 90, 91, 93, 94, 108, 109, 111, 112, 117, 118, 120, 121};
@@ -636,48 +534,18 @@ size_t to_key(state *s, state_info *si) {
     return key;
 }
 
-int from_atari_key(state *s, state_info *si, size_t key) {
-    s->player = 0;
-    s->opponent = 0;
-    s->ko = 0;
-
-    for (int i = 0; i < si->num_blocks; i++) {
-        size_t e = si->exponents[i];
-        int shift = si->shifts[i];
-        s->player |= PLAYER_BLOCKS[key % e] << shift;
-        s->opponent |= OPPONENT_BLOCKS[key % e] << shift;
-        key /= e;
-    }
-
-    // for (int i = 1; i < si->num_moves; i++) {
-    //     stones_t p = si->moves[i];
-    //     if (key % 3 == 1) {
-    //         s->player |= p;
-    //     }
-    //     else if (key % 3 == 2) {
-    //         s->opponent |= p;
-    //     }
-    //     key /= 3;
-    // }
-    return is_atari_legal(s);
-}
-
-size_t max_key(state *s, state_info *si) {
-    size_t key = 0;
+size_t key_size(state_info *si) {
+    size_t size = 1;
     for (int i = si->num_blocks - 1; i >= 0; i--) {
-        size_t e = si->exponents[i];
-        key *= e;
-        key += e - 1;
+        size *= si->exponents[i];
     }
 
     for (int i = si->num_external - 1; i >= 0; i--) {
         stones_t external = si->externals[i];
-        size_t e_size = popcount(external) + 1;
-        key *= e_size;
-        key += e_size - 1;
+        size *= popcount(external) + 1;
     }
     // TODO: Make sure that we're under 1 << 64.
-    return key;
+    return size;
 }
 
 #define HB3 (H0 | H1 | H2)
@@ -1174,6 +1042,8 @@ void init_state(state *s, state_info *si) {
     si->mirror_d_symmetry = (s->playing_area == temp->playing_area && s->target == temp->target && s->immortal == temp->immortal);
 }
 
+#include "atari_state.c"
+
 #ifndef MAIN
 int main() {
     stones_t a = 0x19bf3315;
@@ -1212,7 +1082,6 @@ int main() {
 
     *s = (state) {rectangle(6, 7), WEST_WALL, 2ULL, 0, 2ULL, WEST_WALL, 0};
     init_state(s, si);
-    max_key(s, si);
     state z_;
     state *z = &z_;
     *z = *s;
@@ -1254,9 +1123,11 @@ int main() {
     s->immortal = 0;
     print_state(s);
     init_state(s, si);
-    assert(si->symmetry == 2);
+    // assert(si->symmetry == 2);
     canonize(s, si);
     print_state(s);
+
+    test_atari_state();
 
     return 0;
 }

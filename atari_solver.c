@@ -30,13 +30,6 @@ array_t get_value(array_t *a, size_t index) {
     return !!(a[index] & mask);
 }
 
-typedef struct atari_solution {
-    state *base_state;
-    state_info *si;
-    dict *d;
-    array_t *nodes;
-} solution;
-
 int main(int argc, char *argv[]) {
     int width = -1;
     int height = -1;
@@ -96,33 +89,14 @@ int main(int argc, char *argv[]) {
 
     *s = *base_state;
 
-    size_t max_k = max_key(base_state, si);
     int is_member(size_t key) {
         state s_ = *base_state;
         state *s = &s_;
-        if (!from_atari_key(s, si, key)) {
-            return 0;
-        }
-        if (!is_canonical(s, si)) {
-            return 0;
-        }
-        return 1;
+        return from_atari_key(s, si, key);
     }
-    init_g_dict(gd, is_member, max_k, DEFAULT_G_CONSTANT);
-    // for (size_t k = 0; k < max_k; k++) {
-    //     if (!from_atari_key(s, si, k)){
-    //         continue;
-    //     }
-    //     if (!is_canonical(s, si)) {
-    //         continue;
-    //     }
-    //     add_key(d, k);
-    // }
-    // finalize_dict(d);
-    // size_t num_states = num_keys(d);
+    init_g_dict(gd, is_member, atari_key_size(si), DEFAULT_G_CONSTANT);
     size_t num_states = gd->num_keys;
 
-    // printf("Total positions %zu\n", total_legal);
     printf("Total unique positions %zu\n", num_states);
     printf("Number of checkpoints %zu\n", gd->num_checkpoints);
     FILE *f = fopen("atari_gd.dat", "wb");
@@ -154,8 +128,7 @@ int main(int argc, char *argv[]) {
                     if (is_atari_preleaf(child)) {
                         continue;
                     }
-                    canonize(child, si);
-                    size_t child_key = to_key(child, si);
+                    size_t child_key = to_atari_key(child, si);
                     if (!get_value(nodes, g_key_index(gd, child_key))) {
                         win = 1;
                         break;
@@ -176,6 +149,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+
     frontend:
     if (load_sol) {
         f = fopen("atari.dat", "rb");
@@ -188,6 +162,8 @@ int main(int argc, char *argv[]) {
         fclose(f);
     }
 
+    return 0;
+
     *s = *base_state;
 
     char coord1;
@@ -196,7 +172,7 @@ int main(int argc, char *argv[]) {
     while (1) {
         *child = *s;
         canonize(child, si);
-        size_t key = to_key(child, si);
+        size_t key = to_atari_key(child, si);
         printf("%zu\n", g_key_index(gd, key));
         printf("%d\n", get_value(nodes, g_key_index(gd, key)));
         print_state(s);
@@ -223,7 +199,7 @@ int main(int argc, char *argv[]) {
                 }
                 else {
                     canonize(child, si);
-                    size_t child_key = to_key(child, si);
+                    size_t child_key = to_atari_key(child, si);
                     child_v = get_value(nodes, g_key_index(gd, child_key));
                 }
                 printf("%c%c", c1, c2);

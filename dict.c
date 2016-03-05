@@ -138,21 +138,21 @@ size_t num_keys(dict *d) {
     return num;
 }
 
-void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key, size_t g_constant) {
+void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t key_size, size_t g_constant) {
     gd->is_member = is_member;
     gd->num_keys = 0;
     gd->min_key = ~0ULL;
     gd->max_key = 0ULL;
-    for (size_t i = 0; i < max_key; i++) {
+    for (size_t i = 0; i < key_size; i++) {
         if (is_member(i)) {
             gd->min_key = i;
             break;
         }
     }
     gd->g_constant = g_constant;
-    gd->num_checkpoints = ceil_div(max_key, g_constant);
+    gd->num_checkpoints = ceil_div(key_size, g_constant);
     gd->checkpoints = (size_t*) malloc(gd->num_checkpoints * sizeof(size_t));
-    for (size_t i = 0; i < max_key; i++) {
+    for (size_t i = 0; i < key_size; i++) {
         if (i % g_constant == 0) {
             gd->checkpoints[i / g_constant] = gd->num_keys;
         }
@@ -161,7 +161,7 @@ void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t max_key, size_
             gd->max_key = i;
         }
     }
-    gd->num_checkpoints = ceil_div(max_key, g_constant);
+    gd->num_checkpoints = ceil_div(gd->max_key + 1, g_constant);
     gd->checkpoints = (size_t*) realloc(gd->checkpoints, gd->num_checkpoints * sizeof(size_t));
 }
 
