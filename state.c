@@ -256,8 +256,16 @@ stones_t flood(register stones_t source, register stones_t target) {
     // if (!source){
     //     return source;
     // }
-    register stones_t temp = WEST_BLOCK & target;
-    source |= temp & ~(source + temp);
+    // Must & source with WEST_BLOCK because otherwise this would overflow
+    // 0 1 1  source
+    // 0 0 0
+
+    // 1 1 0  temp
+    // 1 1 0
+    // Disabled for now until further testing.
+    // register stones_t temp = WEST_BLOCK & target;
+    // source |= temp & ~((source & WEST_BLOCK) + temp);
+    register stones_t temp;
     do {
         temp = source;
         source |= (

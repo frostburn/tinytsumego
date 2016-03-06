@@ -312,6 +312,8 @@ int main(int argc, char *argv[]) {
     fclose(f);
 
     // Japanese leaf state calculation.
+    // Store territory for UI. (Or maybe not. Takes too much space.)
+    // f = fopen("territory.dat", "wb");
     size_t zero_layer = abs(sol->base_state->ko_threats);
     state new_s_;
     state *new_s = &new_s_;
@@ -322,9 +324,9 @@ int main(int argc, char *argv[]) {
         *new_s = *s;
         endstate(sol, new_s, sol->base_nodes[zero_layer][i], 0, 1);
 
-        // TOFIX: Treat nakade as alive so that partially dead nakade won't give extra territory.
-        stones_t player_alive = s->player & new_s->player;
-        stones_t opponent_alive = s->opponent & new_s->opponent;
+        // Using a flood of life so that partially dead nakade won't give extra points.
+        stones_t player_alive = flood(new_s->player, s->player);
+        stones_t opponent_alive = flood(new_s->opponent, s->opponent);
 
         stones_t player_territory = 0;
         stones_t opponent_territory = 0;
@@ -357,8 +359,12 @@ int main(int argc, char *argv[]) {
 
         sol->leaf_nodes[i] = score;
 
+        // stones_t territory = player_territory | opponent_territory;
+        // fwrite((void*) &territory, sizeof(stones_t), 1, f);
+
         key = next_key(d, key);
     }
+    // fclose(f);
 
     // Clear the rest of the tree.
     for (size_t j = 0; j < num_layers; j++) {
