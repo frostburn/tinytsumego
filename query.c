@@ -29,12 +29,12 @@ solution* mmap_solution(char *filename) {
     return sol;
 }
 
-#define NUM_SOLUTIONS (1)
+#define NUM_SOLUTIONS (2)
 
 int main() {
     solution* sols[NUM_SOLUTIONS];
     sols[0] = mmap_solution("4x3_japanese.dat");
-    // sols[1] = mmap_solution("4x4_japanese.dat");
+    sols[1] = mmap_solution("4x4_japanese.dat");
     // for (int i = 0; i < NUM_SOLUTIONS; i++) {
     //     repr_state(sols[i]->base_state);
     // }

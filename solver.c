@@ -114,8 +114,13 @@ int main(int argc, char *argv[]) {
     int height = -1;
     int ko_threats = 0;
     int load_sol = 0;
+    int resume_sol = 0;
     if (strcmp(argv[argc - 1], "load") == 0) {
         load_sol = 1;
+        argc--;
+    }
+    if (strcmp(argv[argc - 1], "resume") == 0) {
+        resume_sol = 1;
         argc--;
     }
     if (argc < 3) {
@@ -209,6 +214,7 @@ int main(int argc, char *argv[]) {
     sol->si = si;
     sol->d = d;
     sol->num_layers = num_layers;
+    size_t num_states;
 
     // Re-used at frontend. TODO: Allocate a different pointer.
     state child_;
@@ -218,11 +224,23 @@ int main(int argc, char *argv[]) {
         goto frontend;
     }
 
-    size_t k_size = key_size(si);
-    if (!si->color_symmetry) {
+    if (resume_sol) {
+        char *buffer = file_to_buffer("temp.dat");
+        buffer = load_solution(sol, buffer, 1);
+        num_states = num_keys(sol->d);
+        if (sol->leaf_rule == japanese_double_liberty) {
+            goto iterate_capture;
+        }
+        else {
+            goto iterate_japanese;
+        }
+    }
+
+    size_t k_size = key_size(sol->si);
+    if (!sol->si->color_symmetry) {
         k_size *= 2;
     }
-    init_dict(d, k_size);
+    init_dict(sol->d, k_size);
 
     size_t total_legal = 0;
     for (size_t k = 0; k < k_size; k++) {
@@ -233,10 +251,10 @@ int main(int argc, char *argv[]) {
         size_t layer;
         size_t key = to_key_s(sol, s, &layer);
         assert(layer == 0);
-        add_key(d, key);
+        add_key(sol->d, key);
     }
-    finalize_dict(d);
-    size_t num_states = num_keys(d);
+    finalize_dict(sol->d);
+    num_states = num_keys(sol->d);
 
     printf("Total positions %zu\n", total_legal);
     printf("Total unique positions %zu\n", num_states);
@@ -255,7 +273,7 @@ int main(int argc, char *argv[]) {
     sol->ko_ld = ko_ld;
 
     size_t child_key;
-    size_t key = d->min_key;
+    size_t key = sol->d->min_key;
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(sol, s, key, 0));
         sol->leaf_nodes[i] = 0;
@@ -272,23 +290,23 @@ int main(int argc, char *argv[]) {
                 if (child->ko) {
                     size_t child_layer;
                     child_key = to_key_s(sol, child, &child_layer);
-                    add_lin_key(ko_ld, child_key);
+                    add_lin_key(sol->ko_ld, child_key);
                 }
             }
         }
-        key = next_key(d, key);
+        key = next_key(sol->d, key);
     }
 
-    finalize_lin_dict(ko_ld);
+    finalize_lin_dict(sol->ko_ld);
 
     node_value **ko_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
     sol->ko_nodes = ko_nodes;
     for (size_t i = 0; i < num_layers; i++) {
-        sol->ko_nodes[i] = (node_value*) malloc(ko_ld->num_keys * sizeof(node_value));
+        sol->ko_nodes[i] = (node_value*) malloc(sol->ko_ld->num_keys * sizeof(node_value));
     }
-    printf("Unique positions with ko %zu\n", ko_ld->num_keys);
+    printf("Unique positions with ko %zu\n", sol->ko_ld->num_keys);
 
-    for (size_t i = 0; i < ko_ld->num_keys; i++) {
+    for (size_t i = 0; i < sol->ko_ld->num_keys; i++) {
         for (size_t k = 0; k < num_layers; k++) {
             sol->ko_nodes[k][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
@@ -305,6 +323,7 @@ int main(int argc, char *argv[]) {
     printf("Negamax with capture rules.\n");
     sol->count_prisoners = 1;
     sol->leaf_rule = japanese_double_liberty;
+    iterate_capture:
     iterate(sol);
 
     FILE *f = fopen("capture.dat", "wb");
@@ -317,7 +336,7 @@ int main(int argc, char *argv[]) {
     size_t zero_layer = abs(sol->base_state->ko_threats);
     state new_s_;
     state *new_s = &new_s_;
-    key = d->min_key;
+    key = sol->d->min_key;
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(sol, s, key, zero_layer));
 
@@ -362,7 +381,7 @@ int main(int argc, char *argv[]) {
         // stones_t territory = player_territory | opponent_territory;
         // fwrite((void*) &territory, sizeof(stones_t), 1, f);
 
-        key = next_key(d, key);
+        key = next_key(sol->d, key);
     }
     // fclose(f);
 
@@ -371,7 +390,7 @@ int main(int argc, char *argv[]) {
         for (size_t i = 0; i < num_states; i++) {
             sol->base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
-        for (size_t i = 0; i < ko_ld->num_keys; i++) {
+        for (size_t i = 0; i < sol->ko_ld->num_keys; i++) {
             sol->ko_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
     }
@@ -379,6 +398,7 @@ int main(int argc, char *argv[]) {
     printf("Negamax with Japanese rules.\n");
     sol->count_prisoners = 1;
     sol->leaf_rule = precalculated;
+    iterate_japanese:
     iterate(sol);
 
     f = fopen("japanese.dat", "wb");
