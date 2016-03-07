@@ -128,6 +128,8 @@ size_t to_key_s(solution *sol, state *s, size_t *layer) {
 }
 
 node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int depth) {
+    // size_t l;
+    // assert(to_key_s(sol, s, &l) == key);
     if (target_dead(s)) {
         value_t score = -TARGET_SCORE;
         return (node_value) {score, score, 0, 0};

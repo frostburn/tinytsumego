@@ -850,7 +850,26 @@ int less_than(state *a, state *b) {
     return 0;
 }
 
+void normalize_external(state *s, state_info *si) {
+    for (int i = 0; i < si->num_external; i++) {
+        stones_t external = si->externals[i];
+        int num_filled = popcount(external & (s->player | s->opponent));
+        s->player &= ~external;
+        s->opponent &= ~external;
+        stones_t p = 1ULL;
+        while (num_filled) {
+            if (p & external) {
+                s->player |= p;
+                num_filled--;
+            }
+            p <<= 1;
+        }
+    }
+}
+
 void canonize(state *s, state_info *si) {
+    normalize_external(s, si);
+
     if (si->color_symmetry) {
         s->white_to_play = 0;
     }

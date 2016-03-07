@@ -24,7 +24,7 @@ char* file_to_buffer(char *filename) {
     return buffer;
 }
 
-void iterate(solution *sol) {
+void iterate(solution *sol, char *filename) {
     state s_;
     state *s = &s_;
 
@@ -61,11 +61,11 @@ void iterate(solution *sol) {
         size_t base_key = to_key_s(sol, sol->base_state, &base_layer);
         print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
 
-        FILE *f = fopen("temp.dat", "wb");
+        FILE *f = fopen(filename, "wb");
         save_solution(sol, f);
         fclose(f);
         // Verify solution integrity. For debugging only. Leaks memory.
-        // char *buffer = file_to_buffer("temp.dat");
+        // char *buffer = file_to_buffer(filename);
         // buffer = load_solution(sol, buffer, 0);
     }
 }
@@ -158,22 +158,31 @@ int main(int argc, char *argv[]) {
     state base_state_;
     state *base_state = &base_state_;
 
+    char sol_name[64] = "unknown";
+    char temp_filename[128];
+    char filename[128];
     if (width > 0) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
+        sprintf(sol_name, "%dx%d", width, height);
     }
     else {
-        // *base_state = *corner_six_1;
+        // *base_state = *corner_six; strcpy(sol_name, "corner_six");
         // *base_state = *bulky_ten;
         // *base_state = *cho3;
         // *base_state = *cho535;
         // *base_state = *cho535_537;
         // *base_state = *cho427;
-        *base_state = *rabbity;
+        // *base_state = *rabbity; strcpy(sol_name, "rabbity");
         // *base_state = *super_ko_seki;
         // *base_state = *wut;
         // *base_state = *test;
+        *base_state = *corner_4x3; strcpy(sol_name, "corner_4x3");
+        // *base_state = *corner_3x3; strcpy(sol_name, "corner_3x3");
+        // *base_state = *corner_4x4; strcpy(sol_name, "corner_4x4");
     }
     base_state->ko_threats = ko_threats;
+
+    sprintf(temp_filename, "%s_temp.dat", sol_name);
 
 
     state_info si_;
@@ -225,7 +234,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (resume_sol) {
-        char *buffer = file_to_buffer("temp.dat");
+        char *buffer = file_to_buffer(temp_filename);
         buffer = load_solution(sol, buffer, 1);
         num_states = num_keys(sol->d);
         if (sol->leaf_rule == japanese_double_liberty) {
@@ -276,6 +285,8 @@ int main(int argc, char *argv[]) {
     size_t key = sol->d->min_key;
     for (size_t i = 0; i < num_states; i++) {
         assert(from_key_s(sol, s, key, 0));
+        // size_t layer;
+        // assert(to_key_s(sol, s, &layer) == key);
         sol->leaf_nodes[i] = 0;
         for (size_t k = 0; k < num_layers; k++) {
             (sol->base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
@@ -316,7 +327,7 @@ int main(int argc, char *argv[]) {
     printf("Negamax with Chinese rules.\n");
     sol->count_prisoners = 0;
     sol->leaf_rule = chinese_liberty;
-    iterate(sol);
+    iterate(sol, temp_filename);
     #endif
 
     // NOTE: Capture rules may refuse to kill stones when the needed nakade sacrifices exceed triple the number of stones killed.
@@ -324,9 +335,10 @@ int main(int argc, char *argv[]) {
     sol->count_prisoners = 1;
     sol->leaf_rule = japanese_double_liberty;
     iterate_capture:
-    iterate(sol);
+    iterate(sol, temp_filename);
 
-    FILE *f = fopen("capture.dat", "wb");
+    sprintf(filename, "%s_capture.dat", sol_name);
+    FILE *f = fopen(filename, "wb");
     save_solution(sol, f);
     fclose(f);
 
@@ -399,15 +411,17 @@ int main(int argc, char *argv[]) {
     sol->count_prisoners = 1;
     sol->leaf_rule = precalculated;
     iterate_japanese:
-    iterate(sol);
+    iterate(sol, temp_filename);
 
-    f = fopen("japanese.dat", "wb");
+    sprintf(filename, "%s_japanese.dat", sol_name);
+    f = fopen(filename, "wb");
     save_solution(sol, f);
     fclose(f);
 
     frontend:
     if (load_sol) {
-        char *buffer = file_to_buffer("japanese.dat");
+        sprintf(filename, "%s_japanese.dat", sol_name);
+        char *buffer = file_to_buffer(filename);
         buffer = load_solution(sol, buffer, 1);
     }
 
