@@ -109,10 +109,76 @@ void endstate(solution *sol, state *s, node_value parent_v, int turn, int low_pl
     }
 }
 
+static const char* tsumego_name = NULL;
+static int board_width = 0;
+static int board_height = 0;
+static int ko_threats = 0;
+static int num_layers = -1;
+
+static int string_is_number(const char* string) {
+    const size_t length = strlen(string);
+    size_t i;
+
+    if (!length) {
+        return 0;
+    }
+    for (i = 0; i < length; ++i) {
+        if (!isdigit(string[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static void parse_args(const int argc, char** argv) {
+    int i;
+
+    for (i = 0; i < argc; ++i) {
+        const char* argument = argv[i];
+
+        if (*argument != '-') {
+            if (string_is_number(argument)) {
+                if (!board_width) {
+                    board_width = atoi(argument);
+                }
+                else if (!board_height) {
+                    board_height = atoi(argument);
+                } else {
+                    assert(0);
+                }
+            }
+            else if (!tsumego_name) {
+                tsumego_name = argument;
+            } else {
+                assert(0);
+            }
+            continue;
+        }
+        else if (argument[1] == 'k') {
+            ko_threats = atoi(argument + 2);
+        }
+        else if (argument[1] == 'l') {
+            num_layers = atoi(argument + 2);
+        } else {
+            assert(0);
+        }
+    }
+    if (board_width) {
+        assert(board_height);
+        assert(!tsumego_name);
+    }
+    else if (!tsumego_name) {
+        assert(0);
+    }
+}
+
+typedef struct tsumego_info {
+    const char* name;
+    state* state;
+} tsumego_info;
+
 int main(int argc, char *argv[]) {
-    int width = -1;
-    int height = -1;
-    int ko_threats = 0;
     int load_sol = 0;
     int resume_sol = 0;
     if (strcmp(argv[argc - 1], "load") == 0) {
@@ -123,34 +189,17 @@ int main(int argc, char *argv[]) {
         resume_sol = 1;
         argc--;
     }
-    if (argc < 3) {
-        if (argc == 2) {
-            ko_threats = atoi(argv[1]);
-        }
-        printf("Using predifined tsumego\n");
+    parse_args(argc - 1, argv + 1);
+
+    int width = board_width;
+    int height = board_height;
+    if (board_width >= 10) {
+        fprintf(stderr, "Width must be less than 10.\n");
+        exit(EXIT_FAILURE);
     }
-    else {
-        if (argc == 4) {
-            ko_threats = atoi(argv[3]);
-        }
-        width = atoi(argv[1]);
-        height = atoi(argv[2]);
-        if (width <= 0) {
-            printf("Width must be larger than 0.\n");
-            return 0;
-        }
-        if (width >= 10) {
-            printf("Width must be less than 10.\n");
-            return 0;
-        }
-        if (height <= 0) {
-            printf("Height must be larger than 0.\n");
-            return 0;
-        }
-        if (height >= 8) {
-            printf("Height must be less than 8.\n");
-            return 0;
-        }
+    if (board_height >= 8) {
+        fprintf(stderr, "Height must be less than 8.\n");
+        exit(EXIT_FAILURE);
     }
 
     #include "tsumego.c"
@@ -161,24 +210,32 @@ int main(int argc, char *argv[]) {
     char sol_name[64] = "unknown";
     char temp_filename[128];
     char filename[128];
-    if (width > 0) {
+    if (board_width > 0) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
         sprintf(sol_name, "%dx%d", width, height);
     }
     else {
-        // *base_state = *corner_six; strcpy(sol_name, "corner_six");
-        // *base_state = *bulky_ten;
-        // *base_state = *cho3;
-        // *base_state = *cho535;
-        // *base_state = *cho535_537;
-        // *base_state = *cho427;
-        // *base_state = *rabbity; strcpy(sol_name, "rabbity");
-        // *base_state = *super_ko_seki;
-        // *base_state = *wut;
-        // *base_state = *test;
-        *base_state = *corner_4x3; strcpy(sol_name, "corner_4x3");
-        // *base_state = *corner_3x3; strcpy(sol_name, "corner_3x3");
-        // *base_state = *corner_4x4; strcpy(sol_name, "corner_4x4");
+        int i;
+        int found = 0;
+
+        const tsumego_info tsumego_infos[] = {
+            {"bulky_ten", bulky_ten},
+            {"wut", wut},
+            {NULL, NULL}
+        };
+
+        for (i = 0; tsumego_infos[i].name; ++i) {
+            if (!strcmp(tsumego_name, tsumego_infos[i].name)) {
+                *base_state = *(tsumego_infos[i].state);
+                strcpy(sol_name, tsumego_name);
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            fprintf(stderr, "unknown tsumego: `%s'\n", tsumego_name);
+            exit(EXIT_FAILURE);
+        }
     }
     base_state->ko_threats = ko_threats;
 
@@ -189,12 +246,14 @@ int main(int argc, char *argv[]) {
     state_info *si = &si_;
     init_state(base_state, si);
 
-    size_t num_layers;
     if (si->color_symmetry) {
         num_layers = 2 * abs(base_state->ko_threats) + 1;
     }
-    else {
+    else if (num_layers <= 0) {
         num_layers = abs(base_state->ko_threats) + 1;
+    }
+    else {
+        assert(num_layers >= abs(base_state->ko_threats) + 1);
     }
 
     print_state(base_state);
