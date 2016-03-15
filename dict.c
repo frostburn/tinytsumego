@@ -3,9 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEFAULT_G_CONSTANT (1024)
+#define DEFAULT_G_CONSTANT (512)
+#define HINT_MAX (255)
 
 typedef unsigned long long slot_t;
+typedef unsigned int checkpoint_t;
+typedef unsigned char hint_t;
 
 typedef struct dict
 {
@@ -24,7 +27,8 @@ typedef struct g_dict
     size_t max_key;
     size_t g_constant;
     size_t num_checkpoints;
-    size_t *checkpoints;
+    checkpoint_t *checkpoints;
+    hint_t *hints;
 } g_dict;
 
 typedef struct lin_dict
@@ -169,7 +173,10 @@ void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t key_size, size
     }
     gd->g_constant = g_constant;
     gd->num_checkpoints = ceil_div(key_size, g_constant);
-    gd->checkpoints = (size_t*) malloc(gd->num_checkpoints * sizeof(size_t));
+    gd->checkpoints = (checkpoint_t*) malloc(gd->num_checkpoints * sizeof(checkpoint_t));
+    gd->hints = (hint_t*) malloc(gd->num_checkpoints * sizeof(hint_t));
+    int first = 1;
+    hint_t hint = 0;
     for (size_t i = 0; i < key_size; i++) {
         if (i % g_constant == 0) {
             gd->checkpoints[i / g_constant] = gd->num_keys;
@@ -177,15 +184,26 @@ void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t key_size, size
         if (is_member(i)) {
             gd->num_keys++;
             gd->max_key = i;
+            first = 0;
+        }
+        else if (first && hint < HINT_MAX){
+            hint++;
+        }
+        if (i % g_constant == g_constant - 1) {
+            gd->hints[i / g_constant] = hint;
+            hint = 0;
+            first = 1;
         }
     }
     gd->num_checkpoints = ceil_div(gd->max_key + 1, g_constant);
-    gd->checkpoints = (size_t*) realloc(gd->checkpoints, gd->num_checkpoints * sizeof(size_t));
+    gd->checkpoints = (checkpoint_t*) realloc(gd->checkpoints, gd->num_checkpoints * sizeof(checkpoint_t));
+    gd->hints = (hint_t*) realloc(gd->hints, gd->num_checkpoints * sizeof(hint_t));
 }
 
 size_t g_key_index(g_dict *gd, size_t key) {
-    size_t index = gd->checkpoints[key / gd->g_constant];
-    size_t i_min = gd->g_constant * (key / gd->g_constant);
+    size_t index = key / gd->g_constant;
+    size_t i_min = gd->g_constant * index + gd->hints[index];
+    index = gd->checkpoints[index];
     for (size_t i = i_min; i < key; i++) {
         if (gd->is_member(i)) {
             index++;
@@ -201,6 +219,22 @@ size_t g_next_key(g_dict *gd, size_t last) {
         }
     }
     return last;
+}
+
+void save_g_dict(g_dict *gd, FILE *f) {
+    fwrite((void*) gd, sizeof(g_dict), 1, f);
+    fwrite((void*) gd->checkpoints, sizeof(checkpoint_t), gd->num_checkpoints, f);
+    fwrite((void*) gd->hints, sizeof(hint_t), gd->num_checkpoints, f);
+}
+
+char* load_g_dict(g_dict *gd, char *buffer) {
+    *gd = *((g_dict*) buffer);
+    buffer += sizeof(g_dict);
+    gd->checkpoints = (checkpoint_t*) buffer;
+    buffer += gd->num_checkpoints * sizeof(checkpoint_t);
+    gd->hints = (hint_t*) buffer;
+    buffer += gd->num_checkpoints * sizeof(hint_t);
+    return buffer;
 }
 
 int _compar(const void *a_, const void *b_) {

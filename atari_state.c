@@ -14,14 +14,29 @@ size_t n_choose_k(size_t n, size_t k) {
     return N_CHOOSE_K_TABLE[n + 26 * k];
 }
 
-stones_t combination_from_key(size_t key, size_t num_stones, size_t size, stones_t *moves) {
+stones_t combination_from_key_alt(size_t key, size_t num_stones, size_t size, stones_t *moves) {
     if (!num_stones) {
         return 0;
     }
     for (size_t index = 0; index < size; index++) {
         size_t offset = n_choose_k(size - 1 - index, num_stones - 1);
         if (key < offset) {
-            return moves[index] | combination_from_key(key, num_stones - 1, size - 1 - index, moves + index + 1);
+            return moves[index] | combination_from_key_alt(key, num_stones - 1, size - 1 - index, moves + index + 1);
+        }
+        key -= offset;
+    }
+    assert(0);
+}
+
+stones_t combination_from_key(size_t key, size_t num_stones, size_t size, stones_t *moves) {
+    if (!num_stones) {
+        return 0;
+    }
+    num_stones--;
+    for (size_t rindex = size - 1; rindex >= 0; rindex--) {
+        size_t offset = N_CHOOSE_K_TABLE[rindex + 26 * num_stones];
+        if (key < offset) {
+            return moves[size - 1 - rindex] | combination_from_key(key, num_stones, rindex, moves + size - rindex);
         }
         key -= offset;
     }
@@ -49,8 +64,11 @@ size_t combination_to_key(stones_t stones, size_t num_stones, size_t size, stone
 int is_atari_legal(state *s) {
     stones_t p;
     stones_t chain;
+    stones_t libs;
     stones_t player = s->player;
     stones_t opponent = s->opponent;
+    stones_t p_empty = s->playing_area & ~s->opponent;
+    stones_t o_empty = s->playing_area & ~s->player;
     int player_popcount = popcount(player);
     int opponent_popcount = popcount(opponent);
     // Check for alternating play
@@ -63,21 +81,25 @@ int is_atari_legal(state *s) {
     for (int i = 0; i < WIDTH; i++) {
         for (int j = 0; j + 1 < HEIGHT; j += 2) {
             p = (1ULL | (1ULL << V_SHIFT)) << (i + j * V_SHIFT);
-            chain = flood(p, player);
-            player ^= chain;
-            if (chain && !liberties(chain, s->playing_area & ~s->opponent)) {
-                return 0;
-            }
-            chain = flood(p, opponent);
+            #define CHECK_CHAINS \
+            chain = flood(p, player);\
+            libs = liberties(chain, p_empty);\
+            if (chain && !libs) {\
+                /* Illegal.*/\
+                return 0;\
+            }\
+            player ^= chain;\
+            chain = flood(p, opponent);\
+            if (!chain) {\
+                continue;\
+            }\
+            libs = liberties(chain, o_empty);\
+            if (!(libs & (libs - 1))) {\
+                /* Illegal or there is a stone that can be captured.*/\
+                return 0;\
+            }\
             opponent ^= chain;
-            if (!chain) {
-                continue;
-            }
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (!(libs & (libs - 1))) {
-                // Illegal or there is a stone that can be captured.
-                return 0;
-            }
+            CHECK_CHAINS
         }
         if (!(player | opponent)) {
             return 1;
@@ -86,21 +108,7 @@ int is_atari_legal(state *s) {
     if (HEIGHT % 2) {
         for (int i = 0; i < WIDTH ; i += 2) {
             p = 3ULL << (i + (HEIGHT - 1) * V_SHIFT);  // Assumes that end bits don't matter.
-            chain = flood(p, player);
-            player ^= chain;
-            if (chain && !liberties(chain, s->playing_area & ~s->opponent)) {
-                return 0;
-            }
-            chain = flood(p, opponent);
-            opponent ^= chain;
-            if (!chain) {
-                continue;
-            }
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (!(libs & (libs - 1))) {
-                // Illegal or there is a stone that can be captured.
-                return 0;
-            }
+            CHECK_CHAINS
         }
     }
     return 1;
@@ -114,16 +122,18 @@ int is_atari_preleaf(state *s) {
     for (int i = 0; i < WIDTH; i++) {
         for (int j = 0; j + 1 < HEIGHT; j += 2) {
             p = (1ULL | (1ULL << V_SHIFT)) << (i + j * V_SHIFT);
-            chain = flood(p, opponent);
-            if (!chain) {
-                continue;
-            }
+            #define CHECK_CHAIN \
+            chain = flood(p, opponent);\
+            if (!chain) {\
+                continue;\
+            }\
+            stones_t libs = liberties(chain, s->playing_area & ~s->player);\
+            if (libs && !(libs & (libs - 1))) {\
+                /* There is a stone that can be captured.*/\
+                return 1;\
+            }\
             opponent ^= chain;
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (libs && !(libs & (libs - 1))) {
-                // There is a stone that can be captured.
-                return 1;
-            }
+            CHECK_CHAIN
         }
         if (!opponent) {
             return 0;
@@ -132,16 +142,7 @@ int is_atari_preleaf(state *s) {
     if (HEIGHT % 2) {
         for (int i = 0; i < WIDTH ; i += 2) {
             p = 3ULL << (i + (HEIGHT - 1) * V_SHIFT);  // Assumes that end bits don't matter.
-            chain = flood(p, opponent);
-            if (!chain) {
-                continue;
-            }
-            opponent ^= chain;
-            stones_t libs = liberties(chain, s->playing_area & ~s->player);
-            if (libs && !(libs & (libs - 1))) {
-                // There is a stone that can be captured.
-                return 1;
-            }
+            CHECK_CHAIN
         }
     }
     return 0;
@@ -149,17 +150,20 @@ int is_atari_preleaf(state *s) {
 
 size_t atari_size(size_t num_stones, size_t size) {
     size_t num_o = (num_stones + 1) / 2;
-    return n_choose_k(size, num_o) * n_choose_k(size - num_o, num_stones / 2);
+    // return n_choose_k(size, num_o) * n_choose_k(size - num_o, num_stones / 2);
+    return N_CHOOSE_K_TABLE[size + 26 * num_o] * N_CHOOSE_K_TABLE[size - num_o + 26 * (num_stones / 2)];
 }
 
 int from_atari_key(state *s, state_info *si, size_t key) {
     s->white_to_play = 0;
     for (size_t num_stones = 0; num_stones < si->size; num_stones++) {
-        size_t offset = atari_size(num_stones, si->size);
+        // size_t offset = atari_size(num_stones, si->size);
+        size_t num_o = (num_stones + 1) / 2;
+        size_t num_p = num_stones / 2;
+        size_t m = N_CHOOSE_K_TABLE[si->size - num_o + 26 * num_p];
+        size_t offset = N_CHOOSE_K_TABLE[si->size + 26 * num_o] * m;
         if (key < offset) {
-            size_t num_o = (num_stones + 1) / 2;
-            size_t num_p = num_stones / 2;
-            size_t m = n_choose_k(si->size - num_o, num_p);
+            // size_t m = n_choose_k(si->size - num_o, num_p);
             size_t p_key = key % m;
             size_t o_key = key / m;
             s->opponent = combination_from_key(o_key, num_o, si->size, si->moves + 1);
@@ -209,7 +213,9 @@ size_t to_atari_key(state *s, state_info *si) {
 
 size_t atari_key_size(state_info *si) {
     size_t offset = 0;
-    for (size_t num_stones = 0; num_stones < si->size; num_stones++) {
+    // si->size, illegal
+    // si->size - 1, chain in atari -> preleaf
+    for (size_t num_stones = 0; num_stones <= si->size - 2; num_stones++) {
         offset += atari_size(num_stones, si->size);
     }
     return offset;
@@ -241,14 +247,14 @@ void test_atari_state() {
     printf("%zu\n", atari_key_size(si));
 
     // Benchmark
-    // s->playing_area = rectangle(4, 4);
-    // s->player = 0;
-    // s->opponent = 0;
-    // init_state(s, si);
-    // k_size = atari_key_size(si);
-    // for (size_t k = 0; k < k_size; k++) {
-    //     if (from_atari_key(s, si, k)) {
-    //         to_atari_key(s, si);
-    //     }
-    // }
+    s->playing_area = rectangle(4, 4);
+    s->player = 0;
+    s->opponent = 0;
+    init_state(s, si);
+    k_size = atari_key_size(si);
+    for (size_t k = 0; k < k_size; k++) {
+        if (from_atari_key(s, si, k)) {
+            to_atari_key(s, si);
+        }
+    }
 }

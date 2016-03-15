@@ -9,6 +9,7 @@
 #include "state.c"
 #include "dict.c"
 #include "node.c"
+#include "utils.c"
 
 // Where's the makefile? Oh, you gotta be kidding me.
 // gcc -std=gnu99 -Wall -O3 atari_solver.c -o atari_solver; atari_solver 4 3
@@ -65,8 +66,12 @@ int main(int argc, char *argv[]) {
     state base_state_;
     state *base_state = &base_state_;
 
+    char sol_name[64] = "default";
+    char node_name[64];
+    char gd_name[64];
     if (width > 0) {
         *base_state = (state) {rectangle(width, height), 0, 0, 0, 0};
+        sprintf(sol_name, "%dx%d", width, height);
     }
     else {
         *base_state = (state) {cross(south(east(rectangle(2, 2)))), 0, 0, 0, 0};
@@ -75,6 +80,9 @@ int main(int argc, char *argv[]) {
         // *base_state = *cho3;
         // *base_state = *cho534;
     }
+    sprintf(gd_name, "atari_gd_%s.dat", sol_name);
+    sprintf(node_name, "atari_nodes_%s.dat", sol_name);
+
     print_state(base_state);
 
     state_info si_;
@@ -94,24 +102,35 @@ int main(int argc, char *argv[]) {
         state *s = &s_;
         return from_atari_key(s, si, key);
     }
-    init_g_dict(gd, is_member, atari_key_size(si), DEFAULT_G_CONSTANT);
+
+    FILE *f;
+    if (load_sol) {
+        char *buffer = file_to_buffer(gd_name);
+        buffer = load_g_dict(gd, buffer);
+        gd->is_member = is_member;
+    }
+    else {
+        init_g_dict(gd, is_member, atari_key_size(si), DEFAULT_G_CONSTANT);
+        f = fopen(gd_name, "wb");
+        save_g_dict(gd, f);
+        fclose(f);
+    }
+
     size_t num_states = gd->num_keys;
 
     printf("Total unique positions %zu\n", num_states);
     printf("Number of checkpoints %zu\n", gd->num_checkpoints);
-    FILE *f = fopen("atari_gd.dat", "wb");
-    fwrite((void*) gd->checkpoints, sizeof(size_t), gd->num_checkpoints, f);
-    fclose(f);
+
 
     size_t node_array_size = ceil_div(num_states, 8);
     array_t *nodes = (array_t*) malloc(node_array_size);
 
+    state child_;
+    state *child = &child_;
+
     if (load_sol) {
         goto frontend;
     }
-
-    state child_;
-    state *child = &child_;
 
     int changed = 1;
     while (changed) {
@@ -147,22 +166,32 @@ int main(int argc, char *argv[]) {
         else {
             printf("Loses\n");
         }
-    }
+        // print_state(base_state);
+        // for (int j = 1; j < si->num_moves; j++) {
+        //     *child = *base_state;
+        //     int prisoners;
+        //     if (make_move(child, si->moves[j], &prisoners)) {
+        //         size_t child_key = to_atari_key(child, si);
+        //         printf("%d %d\n", j, get_value(nodes, g_key_index(gd, child_key)));
+        //     }
+        //     else {
+        //         print_stones(si->moves[j]);
+        //     }
+        // }
 
-
-    frontend:
-    if (load_sol) {
-        f = fopen("atari.dat", "rb");
-        assert(fread((void*) nodes, sizeof(array_t), node_array_size, f));
-        fclose(f);
-    }
-    else {
-        f = fopen("atari.dat", "wb");
+        f = fopen(node_name, "wb");
         fwrite((void*) nodes, sizeof(array_t), node_array_size, f);
         fclose(f);
     }
 
     return 0;
+
+    frontend:
+    if (load_sol) {
+        f = fopen(node_name, "rb");
+        assert(fread((void*) nodes, sizeof(array_t), node_array_size, f));
+        fclose(f);
+    }
 
     *s = *base_state;
 
@@ -170,9 +199,7 @@ int main(int argc, char *argv[]) {
     int coord2;
     int turn = 0;
     while (1) {
-        *child = *s;
-        canonize(child, si);
-        size_t key = to_atari_key(child, si);
+        size_t key = to_atari_key(s, si);
         printf("%zu\n", g_key_index(gd, key));
         printf("%d\n", get_value(nodes, g_key_index(gd, key)));
         print_state(s);
@@ -198,7 +225,6 @@ int main(int argc, char *argv[]) {
                     child_v = 1;
                 }
                 else {
-                    canonize(child, si);
                     size_t child_key = to_atari_key(child, si);
                     child_v = get_value(nodes, g_key_index(gd, child_key));
                 }
@@ -218,8 +244,8 @@ int main(int argc, char *argv[]) {
         coord1 = tolower(coord1) - 'a';
         stones_t move;
         if (coord1 < 0 || coord1 >= WIDTH) {
-            // printf("%d, %d\n", coord1, coord2);
-            move = 0;
+            printf("Illegal move\n");
+            return 1;
         }
         else {
             move = 1ULL << (coord1 + V_SHIFT * coord2);
@@ -227,6 +253,10 @@ int main(int argc, char *argv[]) {
         int prisoners;
         if (make_move(s, move, &prisoners)) {
             turn = !turn;
+        }
+        else {
+            printf("Illegal move\n");
+            return 1;
         }
     }
 }
