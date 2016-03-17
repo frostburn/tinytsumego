@@ -258,11 +258,29 @@ state *corner_4x3 = &corner_4x3_;
 corner_4x3->target = corner_4x3->opponent;
 corner_4x3->immortal = corner_4x3->player;
 
+state edge_4x3_ = (state) {
+    rectangle(8, 6),
+    rectangle(8, 6) ^ east(rectangle(6, 4)) ^ two(3, 4),
+    east(rectangle(6, 4) ^ east(rectangle(4, 3))),
+};
+state *edge_4x3 = &edge_4x3_;
+edge_4x3->target = edge_4x3->opponent;
+edge_4x3->immortal = edge_4x3->player;
+
 state corner_4x4_ = (state) {
-    rectangle(6, 6),
-    rectangle(6, 6) ^ rectangle(5, 5),
+    rectangle(7, 7),
+    rectangle(7, 7) ^ rectangle(5, 5) ^ two(0,5) ^ tvo(5, 0),
     rectangle(5, 5) ^ rectangle(4, 4),
 };
 state *corner_4x4 = &corner_4x4_;
 corner_4x4->target = corner_4x4->opponent;
 corner_4x4->immortal = corner_4x4->player;
+
+state edge_4x4_ = (state) {
+    rectangle(8, 7),
+    rectangle(8, 7) ^ east(rectangle(6, 6)) ^ one(1, 5) ^ one(6, 5),
+    east(rectangle(6, 5) ^ east(rectangle(4, 4))),
+};
+state *edge_4x4 = &edge_4x4_;
+edge_4x4->target = edge_4x4->opponent;
+edge_4x4->immortal = edge_4x4->player;

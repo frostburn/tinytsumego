@@ -55,6 +55,8 @@ typedef struct state_info
     stones_t moves[STATE_SIZE + 1];
     int num_external;
     stones_t externals[STATE_SIZE];
+    int external_sizes[STATE_SIZE];
+    stones_t internal;
     int num_blocks;
     size_t exponents[STATE_SIZE];
     int shifts[STATE_SIZE];
@@ -265,6 +267,11 @@ stones_t flood(register stones_t source, register stones_t target) {
     // Disabled for now until further testing.
     // register stones_t temp = WEST_BLOCK & target;
     // source |= temp & ~((source & WEST_BLOCK) + temp);
+    // The following might be worth it, but it is hard to say.
+    // source |= (
+    //     (source << V_SHIFT) |
+    //     (source >> V_SHIFT)
+    // ) & target;
     register stones_t temp;
     do {
         temp = source;
@@ -494,7 +501,7 @@ int from_key(state *s, state_info *si, size_t key) {
 
     for (int i = 0; i < si->num_external; i++) {
         stones_t external = si->externals[i];
-        size_t e_size = popcount(external) + 1;
+        size_t e_size = si->external_sizes[i];
         size_t num_filled = key % e_size;
         key /= e_size;
         stones_t p = 1ULL;
@@ -532,7 +539,7 @@ size_t to_key(state *s, state_info *si) {
 
     for (int i = si->num_external - 1; i >= 0; i--) {
         stones_t external = si->externals[i];
-        size_t e_size = popcount(external) + 1;
+        size_t e_size = si->external_sizes[i];
         size_t num_filled = popcount(external & (s->player | s->opponent));
         assert(num_filled < e_size);
         key *= e_size;
@@ -835,16 +842,37 @@ void mirror_d(state *s) {
     s->ko = s_mirror_d(s->ko);
 }
 
-int less_than(state *a, state *b) {
-    if (a->player < b->player) {
+int less_than(state *a, state *b, state_info *si) {
+    stones_t a_player = a->player & si->internal;
+    stones_t b_player = b->player & si->internal;
+    if (a_player < b_player) {
         return 1;
     }
-    else if (a->player == b->player){
-        if (a->opponent < b->opponent) {
+    else if (a_player == b_player){
+        stones_t a_opponent = a->opponent & si->internal;
+        stones_t b_opponent = b->opponent & si->internal;
+        if (a_opponent < b_opponent) {
             return 1;
         }
-        else if (a->opponent == b->opponent) {
-            return a->ko < b->ko;
+        else if (a_opponent == b_opponent) {
+            if (a->ko < b->ko) {
+                return 1;
+            }
+            else if (a->ko == b->ko) {
+                size_t key_a = 0;
+                size_t key_b = 0;
+                stones_t a_filling = a->player | a->opponent;
+                stones_t b_filling = b->player | b->opponent;
+                for (int i = si->num_external - 1; i >= 0; i--) {
+                    stones_t external = si->externals[i];
+                    size_t e_size = si->external_sizes[i];
+                    key_a *= e_size;
+                    key_b *= e_size;
+                    key_a += popcount(external & a_filling);
+                    key_b += popcount(external & b_filling);
+                }
+                return key_a < key_b;
+            }
         }
     }
     return 0;
@@ -868,8 +896,6 @@ void normalize_external(state *s, state_info *si) {
 }
 
 void canonize(state *s, state_info *si) {
-    normalize_external(s, si);
-
     if (si->color_symmetry) {
         s->white_to_play = 0;
     }
@@ -879,18 +905,18 @@ void canonize(state *s, state_info *si) {
 
     if (si->mirror_v_symmetry) {
         mirror_v(temp, si);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             *s = *temp;
         }
     }
     if (si->mirror_h_symmetry) {
         mirror_h(temp, si);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             *s = *temp;
         }
         if (si->mirror_v_symmetry) {
             mirror_v(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 *s = *temp;
             }
         }
@@ -898,23 +924,23 @@ void canonize(state *s, state_info *si) {
 
     if (si->mirror_d_symmetry) {
         mirror_d(temp);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             *s = *temp;
         }
         if (si->mirror_v_symmetry) {
             mirror_v(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 *s = *temp;
             }
         }
         if (si->mirror_h_symmetry) {
             mirror_h(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 *s = *temp;
             }
             if (si->mirror_v_symmetry) {
                 mirror_v(temp, si);
-                if (less_than(temp, s)) {
+                if (less_than(temp, s, si)) {
                     *s = *temp;
                 }
             }
@@ -933,18 +959,18 @@ int is_canonical(state *s, state_info *si) {
 
     if (si->mirror_v_symmetry) {
         mirror_v(temp, si);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             return 0;
         }
     }
     if (si->mirror_h_symmetry) {
         mirror_h(temp, si);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             return 0;
         }
         if (si->mirror_v_symmetry) {
             mirror_v(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 return 0;
             }
         }
@@ -952,23 +978,23 @@ int is_canonical(state *s, state_info *si) {
 
     if (si->mirror_d_symmetry) {
         mirror_d(temp);
-        if (less_than(temp, s)) {
+        if (less_than(temp, s, si)) {
             return 0;;
         }
         if (si->mirror_v_symmetry) {
             mirror_v(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 return 0;;
             }
         }
         if (si->mirror_h_symmetry) {
             mirror_h(temp, si);
-            if (less_than(temp, s)) {
+            if (less_than(temp, s, si)) {
                 return 0;;
             }
             if (si->mirror_v_symmetry) {
                 mirror_v(temp, si);
-                if (less_than(temp, s)) {
+                if (less_than(temp, s, si)) {
                     return 0;;
                 }
             }
@@ -1021,8 +1047,10 @@ void init_state(state *s, state_info *si) {
     process_external(si, s->opponent & s->target, s->player & s->immortal, s->playing_area);
 
     for (int i = 0;i < si->num_external; i++) {
+        si->external_sizes[i] = popcount(si->externals[i]) + 1;
         open ^= si->externals[i];
     }
+    si->internal = open;
 
     si->num_blocks = 0;
     for (int i = 0;i < STATE_SIZE; i++) {

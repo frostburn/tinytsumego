@@ -10,19 +10,10 @@
 #include "dict.c"
 #include "node.c"
 #include "solver_common.c"
+#include "utils.c"
 
 // Where's the makefile? Oh, you gotta be kidding me.
 // gcc -std=gnu99 -Wall -O3 solver.c -o solver; solver 4 3
-
-char* file_to_buffer(char *filename) {
-    struct stat sb;
-    stat(filename, &sb);
-    char *buffer = (char*) malloc(sb.st_size * sizeof(char));
-    FILE *f = fopen(filename, "rb");
-    assert(fread((void*) buffer, sizeof(char), sb.st_size, f));
-    fclose(f);
-    return buffer;
-}
 
 void iterate(solution *sol, char *filename) {
     state s_;
@@ -221,6 +212,10 @@ int main(int argc, char *argv[]) {
         const tsumego_info tsumego_infos[] = {
             {"bulky_ten", bulky_ten},
             {"wut", wut},
+            {"corner_3x3", corner_3x3},
+            {"corner_4x3", corner_4x3},
+            {"corner_4x4", corner_4x4},
+            {"edge_4x3", edge_4x3},
             {NULL, NULL}
         };
 
