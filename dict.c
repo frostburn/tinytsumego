@@ -180,19 +180,17 @@ void init_g_dict(g_dict *gd, int (*is_member)(size_t key), size_t key_size, size
     for (size_t i = 0; i < key_size; i++) {
         if (i % g_constant == 0) {
             gd->checkpoints[i / g_constant] = gd->num_keys;
+            hint = 0;
+            first = 1;
         }
         if (is_member(i)) {
             gd->num_keys++;
             gd->max_key = i;
             first = 0;
+            gd->hints[i / g_constant] = hint;
         }
         else if (first && hint < HINT_MAX){
             hint++;
-        }
-        if (i % g_constant == g_constant - 1) {
-            gd->hints[i / g_constant] = hint;
-            hint = 0;
-            first = 1;
         }
     }
     gd->num_checkpoints = ceil_div(gd->max_key + 1, g_constant);
@@ -443,6 +441,24 @@ int main() {
     btree_traverse(v, depth, 0, say);
 
     printf("%zu\n", btree_num_keys(v, depth));
+
+
+    g_dict gd_;
+    g_dict *gd = &gd_;
+
+    int is_member(size_t key) {
+        return ((((key ^ 12398) + 234) * 329879) % 7) == 5;
+    }
+    init_g_dict(gd, is_member, 99, 10);
+    printf("gd->num_keys = %zu\n", gd->num_keys);
+    size_t key = gd->min_key;
+    for (size_t i = 0; i < gd->num_keys; i++) {
+        printf("%zu: %zu %zu\n", key, i, g_key_index(gd, key));
+        key = g_next_key(gd, key);
+    }
+    for (size_t i = 0; i < gd->num_checkpoints; i++) {
+        printf("%zu: cumulative=%u, shift=%d\n", i * gd->g_constant, gd->checkpoints[i], gd->hints[i]);
+    }
 
     return 0;
 }
