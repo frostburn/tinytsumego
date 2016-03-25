@@ -175,7 +175,7 @@ void repr_state(state *s) {
 }
 
 void sscanf_state(const char *str, state *s) {
-    sscanf(
+    assert(sscanf(
         str,
         "%llu %llu %llu %llu %llu %llu %d %d %d",
         &(s->playing_area),
@@ -187,7 +187,7 @@ void sscanf_state(const char *str, state *s) {
         &(s->passes),
         &(s->ko_threats),
         &(s->white_to_play)
-    );
+    ) == 9);
 }
 
 int popcount(stones_t stones) {

@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+// TODO <signal.h> catch Ctrl+C
 
 // No headers? Are you serious?!
 #define MAIN
@@ -208,16 +209,6 @@ int main(int argc, char *argv[]) {
     else {
         int i;
         int found = 0;
-
-        const tsumego_info tsumego_infos[] = {
-            {"bulky_ten", bulky_ten},
-            {"wut", wut},
-            {"corner_3x3", corner_3x3},
-            {"corner_4x3", corner_4x3},
-            {"corner_4x4", corner_4x4},
-            {"edge_4x3", edge_4x3},
-            {NULL, NULL}
-        };
 
         for (i = 0; tsumego_infos[i].name; ++i) {
             if (!strcmp(tsumego_name, tsumego_infos[i].name)) {

@@ -29,14 +29,24 @@ solution* mmap_solution(char *filename) {
     return sol;
 }
 
-#define NUM_SOLUTIONS (2)
-
-int main() {
-    solution* sols[NUM_SOLUTIONS];
-    sols[0] = mmap_solution("4x3_japanese.dat");
-    sols[1] = mmap_solution("4x4_japanese.dat");
-    // for (int i = 0; i < NUM_SOLUTIONS; i++) {
-    //     repr_state(sols[i]->base_state);
+int main(int argc, char *argv[]) {
+    int num_solutions = argc - 1;
+    solution **sols = (solution**) malloc(num_solutions * sizeof(solution*));
+    for (int i = 0; i < num_solutions; i++) {
+        sols[i] = mmap_solution(argv[i + 1]);
+        repr_state(sols[i]->base_state);
+        printf("%zu\n", sols[i]->num_layers);
+    }
+    // sols[0] = mmap_solution("center_4x3_japanese.dat");
+    // sols[1] = mmap_solution("corner_4x3_japanese.dat");
+    // sols[2] = mmap_solution("3x3_japanese.dat");
+    // sols[3] = mmap_solution("4x3_japanese.dat");
+    // if () {
+    //     for (int i = 0; i < NUM_SOLUTIONS; i++) {
+    //         print_state(sols[i]->base_state);
+    //         repr_state(sols[i]->base_state);
+    //     }
+    //     return 0;
     // }
     state s_;
     state *s = &s_;
@@ -54,7 +64,8 @@ int main() {
             break;
         }
         sscanf_state(in, s);
-        for (int i = 0; i < NUM_SOLUTIONS; i++) {
+        for (int i = 0; i < num_solutions; i++) {
+            // TODO: Check color of target and immortal too.
             if (
                 (sols[i]->base_state->playing_area == s->playing_area) &&
                 (sols[i]->base_state->target == s->target) &&
@@ -62,20 +73,36 @@ int main() {
             ) {
                 size_t layer;
                 size_t key = to_key_s(sols[i], s, &layer);
+                int passes_valid = s->passes <= 2;
+                int layer_valid = (layer >= 0 && layer < sols[i]->num_layers);
+                int key_valid;
+                if (s->ko) {
+                    key_valid = test_lin_key(sols[i]->ko_ld, key);
+                }
+                else {
+                    key_valid = test_key(sols[i]->d, key);
+                }
+                if (!layer_valid || !key_valid || !passes_valid) {
+                    printf("1 -1 %d %d\n", layer_valid, key_valid);
+                    printf("0\n");
+                    break;
+                }
                 node_value v = negamax_node(sols[i], s, key, layer, 0);
                 printf("%d %d %d %d\n", v.low, v.high, v.low_distance, v.high_distance);
 
                 int num_values = 0;
-                for (int j = 0; j < sols[i]->si->num_moves; j++) {
-                    *child = *s;
-                    int prisoners;
-                    stones_t move = sols[i]->si->moves[j];
-                    if (make_move(child, move, &prisoners)) {
-                        size_t child_layer;
-                        size_t child_key = to_key_s(sols[i], child, &child_layer);
-                        node_value child_v = negamax_node(sols[i], child, child_key, child_layer, 0);
-                        child_moves[num_values] = move;
-                        child_values[num_values++] = child_v;
+                if (s->passes < 2) {
+                    for (int j = 0; j < sols[i]->si->num_moves; j++) {
+                        *child = *s;
+                        int prisoners;
+                        stones_t move = sols[i]->si->moves[j];
+                        if (make_move(child, move, &prisoners)) {
+                            size_t child_layer;
+                            size_t child_key = to_key_s(sols[i], child, &child_layer);
+                            node_value child_v = negamax_node(sols[i], child, child_key, child_layer, 0);
+                            child_moves[num_values] = move;
+                            child_values[num_values++] = child_v;
+                        }
                     }
                 }
                 printf("%d\n", num_values);

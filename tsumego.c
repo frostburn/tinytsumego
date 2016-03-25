@@ -267,6 +267,26 @@ state *edge_4x3 = &edge_4x3_;
 edge_4x3->target = edge_4x3->opponent;
 edge_4x3->immortal = edge_4x3->player;
 
+state center_4x3_ = (state) {
+    rectangle(8, 7),
+    rectangle(8, 7) ^ south(east(rectangle(6, 5))) ^ one(0, 3) ^ one(7, 3),
+    south(east(rectangle(6, 5) ^ south(east(rectangle(4, 3))))),
+};
+state *center_4x3 = &center_4x3_;
+center_4x3->target = center_4x3->opponent;
+center_4x3->immortal = center_4x3->player;
+
+state edge_semeai_4x3_ = (state) {
+    rectangle(9, 7),
+    rectangle(6, 4) ^ east(rectangle(4, 3)),
+    rectangle(7, 5) ^ rectangle(6, 4),
+};
+state *edge_semeai_4x3 = &edge_semeai_4x3_;
+edge_semeai_4x3->target = edge_semeai_4x3->opponent | edge_semeai_4x3->player;
+stones_t es43_temp = rectangle(9, 7) ^ rectangle(8, 6) ^ one(7, 5);
+edge_semeai_4x3->player |= es43_temp;
+edge_semeai_4x3->immortal |= es43_temp;
+
 state corner_4x4_ = (state) {
     rectangle(7, 7),
     rectangle(7, 7) ^ rectangle(5, 5) ^ two(0,5) ^ tvo(5, 0),
@@ -284,3 +304,26 @@ state edge_4x4_ = (state) {
 state *edge_4x4 = &edge_4x4_;
 edge_4x4->target = edge_4x4->opponent;
 edge_4x4->immortal = edge_4x4->player;
+
+state center_4x4_ = (state) {
+    rectangle(8, 6),
+    (rectangle(8, 6) ^ east(rectangle(6, 6))) & ~south(south(rectangle(8, 2))),
+    east(rectangle(6, 6) ^ south(east(rectangle(4, 4)))),
+};
+state *center_4x4 = &center_4x4_;
+center_4x4->target = center_4x4->opponent;
+center_4x4->immortal = center_4x4->player;
+
+
+const tsumego_info tsumego_infos[] = {
+    {"bulky_ten", bulky_ten},
+    {"wut", wut},
+    {"corner_3x3", corner_3x3},
+    {"corner_4x3", corner_4x3},
+    {"corner_4x4", corner_4x4},
+    {"edge_4x3", edge_4x3},
+    {"edge_semeai_4x3", edge_semeai_4x3},
+    {"center_4x3", center_4x3},
+    {"center_4x4", center_4x4},
+    {NULL, NULL}
+};
