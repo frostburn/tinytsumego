@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
     printf("Solutions loaded.\n");
 
     while (1) {
-        char* test = gets(in);
+        char* test = fgets(in, 512, stdin);
         if (test == NULL) {
             break;
         }
