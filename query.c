@@ -86,6 +86,7 @@ int main(int argc, char *argv[]) {
                 if (!layer_valid || !key_valid || !passes_valid) {
                     printf("1 -1 %d %d\n", layer_valid, key_valid);
                     printf("0\n");
+                    solution_found = 1;
                     break;
                 }
                 node_value v = negamax_node(sols[i], s, key, layer, 0);
