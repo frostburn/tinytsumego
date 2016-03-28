@@ -82,6 +82,14 @@ state cho4_ = cho1_4_;
 state *cho4 = &cho4_;
 cho4->opponent |= 3UL << (5 + V_SHIFT);
 
+state cho5_;
+state *cho5 = &cho5_;
+sscanf_state("9223372036854775807 2185562305871872 206427915264 0 0 0 0 0 0", cho5);
+cho5->opponent ^= one(2, 2);
+cho5->playing_area = rectangle(6, 6);
+cho5->target = cho5->opponent;
+cho5->immortal = cho5->player;
+
 state cho529_532_ = (state) {
     rectangle(6, 6),
     south(east(rectangle(5, 5))) & ~rectangle(4, 4),
@@ -289,10 +297,12 @@ edge_semeai_4x3->immortal |= es43_temp;
 
 state corner_4x4_ = (state) {
     rectangle(7, 7),
-    rectangle(7, 7) ^ rectangle(5, 5) ^ two(0,5) ^ tvo(5, 0),
+    rectangle(7, 7) ^ rectangle(5, 5),
     rectangle(5, 5) ^ rectangle(4, 4),
 };
 state *corner_4x4 = &corner_4x4_;
+// corner_4x4->player ^= two(0,5) | tvo(5, 0);
+corner_4x4->player ^= one(4, 5) | one(5, 4);
 corner_4x4->target = corner_4x4->opponent;
 corner_4x4->immortal = corner_4x4->player;
 
@@ -316,6 +326,8 @@ center_4x4->immortal = center_4x4->player;
 
 
 const tsumego_info tsumego_infos[] = {
+    {"cho1", cho1_4},
+    {"cho5", cho5},
     {"bulky_ten", bulky_ten},
     {"wut", wut},
     {"corner_3x3", corner_3x3},

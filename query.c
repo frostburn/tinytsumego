@@ -64,6 +64,7 @@ int main(int argc, char *argv[]) {
             break;
         }
         sscanf_state(in, s);
+        int solution_found = 0;
         for (int i = 0; i < num_solutions; i++) {
             // TODO: Check color of target and immortal too.
             if (
@@ -111,8 +112,13 @@ int main(int argc, char *argv[]) {
                     node_value cv = child_values[j];
                     printf("%llu %d %d %d %d\n", cm, cv.low, cv.high, cv.low_distance, cv.high_distance);
                 }
+                solution_found = 1;
                 break;
             }
+        }
+        if (!solution_found) {
+            printf("1 -1 1 1\n");
+            printf("0\n");
         }
     }
     // TODO: Cleanup.
