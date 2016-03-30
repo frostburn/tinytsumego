@@ -153,6 +153,20 @@ state *cho538_540 = &cho538_540_;
 cho538_540->immortal = cho538_540->player;
 cho538_540->target = cho538_540->opponent;
 
+state cho538_;
+state *cho538 = &cho538_;
+sscanf_state("9223372036854775807 4268136333312 807407616 0 0 0 0 0 0", cho538);
+cho538->playing_area = rectangle(6, 5);
+cho538->target = cho538->opponent;
+cho538->immortal = cho538->player;
+
+state cho551_;
+state *cho551 = &cho551_;
+sscanf_state("9223372036854775807 2101256 1092574320271360 0 0 0 0 0 0", cho551);
+cho551->playing_area = rectangle(5, 6);
+cho551->target = cho551->player;
+cho551->immortal = cho551->opponent;
+
 state cho552_ = (state) {
     rectangle(5, 5),
     rectangle(4, 4) ^ rectangle(3, 3) ^ one(3, 3),
@@ -324,10 +338,29 @@ state *center_4x4 = &center_4x4_;
 center_4x4->target = center_4x4->opponent;
 center_4x4->immortal = center_4x4->player;
 
+state target_test_ = (state) {
+    rectangle(5, 1),
+    one(2, 0),
+    one(0, 0) | one(4, 0),
+};
+state *target_test = &target_test_;
+target_test->target = target_test->player;
+target_test->immortal = target_test->opponent;
+
+state nakade_test_ = (state) {
+    rectangle(5, 3),
+    rectangle(5, 3) ^ rectangle(4, 2),
+    rectangle(4, 2) ^ rectangle(3, 1),
+};
+state *nakade_test = &nakade_test_;
+nakade_test->target = nakade_test->opponent;
+nakade_test->immortal = nakade_test->player;
 
 const tsumego_info tsumego_infos[] = {
     {"cho1", cho1_4},
     {"cho5", cho5},
+    {"cho538", cho538},
+    {"cho551", cho551},
     {"bulky_ten", bulky_ten},
     {"wut", wut},
     {"corner_3x3", corner_3x3},
@@ -337,5 +370,7 @@ const tsumego_info tsumego_infos[] = {
     {"edge_semeai_4x3", edge_semeai_4x3},
     {"center_4x3", center_4x3},
     {"center_4x4", center_4x4},
+    {"target_test", target_test},
+    {"nakade_test", nakade_test},
     {NULL, NULL}
 };

@@ -56,6 +56,7 @@ typedef struct state_info
     int num_external;
     stones_t externals[STATE_SIZE];
     int external_sizes[STATE_SIZE];
+    stones_t external;
     stones_t internal;
     int num_blocks;
     size_t exponents[STATE_SIZE];
@@ -68,7 +69,7 @@ typedef struct state_info
     // No rotational or color + spatial symmetries implemented.
 } state_info;
 
-void print_stones(stones_t stones) {
+void print_stones(const stones_t stones) {
     printf(" ");
     for (int i = 0; i < WIDTH; i++) {
         printf(" %c", 'A' + i);
@@ -91,7 +92,7 @@ void print_stones(stones_t stones) {
     printf("\n");
 }
 
-void print_state(state *s) {
+void print_state(const state *s) {
     stones_t black, white;
     if (s->white_to_play) {
         white = s->player;
@@ -159,7 +160,7 @@ void print_state(state *s) {
     printf("passes = %d ko_threats = %d white_to_play = %d\n", s->passes, s->ko_threats, s->white_to_play);
 }
 
-void repr_state(state *s) {
+void repr_state(const state *s) {
     printf(
         "%llu %llu %llu %llu %llu %llu %d %d %d\n",
         s->playing_area,
@@ -190,11 +191,11 @@ void sscanf_state(const char *str, state *s) {
     ) == 9);
 }
 
-int popcount(stones_t stones) {
+int popcount(const stones_t stones) {
     return __builtin_popcountll(stones);
 }
 
-size_t bitscan(stones_t stones) {
+size_t bitscan(const stones_t stones) {
     assert(stones);
     size_t index = 0;
     while (!((1ULL << index) & stones)) {
@@ -203,7 +204,7 @@ size_t bitscan(stones_t stones) {
     return index;
 }
 
-size_t bitscan_left(stones_t stones) {
+size_t bitscan_left(const stones_t stones) {
     assert(stones);
     size_t index = STATE_SIZE - 1;
     while (!((1ULL << index) & stones)) {
@@ -212,7 +213,7 @@ size_t bitscan_left(stones_t stones) {
     return index;
 }
 
-stones_t rectangle(int width, int height) {
+stones_t rectangle(const int width, const int height) {
     stones_t r = 0;
     for (int i = 0; i < width; ++i)
     {
@@ -236,7 +237,7 @@ stones_t tvo(int x, int y) {
     return (1ULL | (1ULL << V_SHIFT)) << (x * H_SHIFT + y * V_SHIFT);
 }
 
-void dimensions(stones_t stones, int *width, int *height) {
+void dimensions(const stones_t stones, int *width, int *height) {
     for (int i = WIDTH - 1; i >= 0; i--) {
         if (stones & (WEST_WALL << i)) {
             *width = i + 1;
@@ -252,7 +253,7 @@ void dimensions(stones_t stones, int *width, int *height) {
     assert(0);
 }
 
-stones_t flood(register stones_t source, register stones_t target) {
+stones_t flood(register stones_t source, const register stones_t target) {
     source &= target;
     // Conditionals are costly.
     // if (!source){
@@ -285,23 +286,23 @@ stones_t flood(register stones_t source, register stones_t target) {
     return source;
 }
 
-stones_t north(stones_t stones) {
+stones_t north(const stones_t stones) {
     return stones >> V_SHIFT;
 }
 
-stones_t south(stones_t stones) {
+stones_t south(const stones_t stones) {
     return stones << V_SHIFT;
 }
 
-stones_t west(stones_t stones) {
+stones_t west(const stones_t stones) {
     return (stones >> H_SHIFT) & WEST_BLOCK;
 }
 
-stones_t east(stones_t stones) {
+stones_t east(const stones_t stones) {
     return (stones & WEST_BLOCK) << H_SHIFT;
 }
 
-stones_t cross(stones_t stones) {
+stones_t cross(const stones_t stones) {
     return (
         ((stones & WEST_BLOCK) << H_SHIFT) |
         ((stones >> H_SHIFT) & WEST_BLOCK) |
@@ -316,7 +317,7 @@ stones_t blob(stones_t stones) {
     return stones | (stones << V_SHIFT) | (stones >> V_SHIFT);
 }
 
-stones_t liberties(stones_t stones, stones_t empty) {
+stones_t liberties(const stones_t stones, const stones_t empty) {
     return (
         ((stones & WEST_BLOCK) << H_SHIFT) |
         ((stones >> H_SHIFT) & WEST_BLOCK) |
@@ -325,21 +326,21 @@ stones_t liberties(stones_t stones, stones_t empty) {
     ) & ~stones & empty;
 }
 
-int target_dead(state *s) {
+int target_dead(const state *s) {
     return !!(s->target & ~(s->player | s->opponent));
 }
 
-int chinese_liberty_score(state *s) {
+int chinese_liberty_score(const state *s) {
     stones_t player_controlled = s->player | liberties(s->player, s->playing_area & ~s->opponent);
     stones_t opponent_controlled = s->opponent | liberties(s->opponent, s->playing_area & ~s->player);
     return popcount(player_controlled) - popcount(opponent_controlled);
 }
 
-int japanese_liberty_score(state *s) {
+int japanese_liberty_score(const state *s) {
     return popcount(liberties(s->player, s->playing_area & ~s->opponent)) - popcount(liberties(s->opponent, s->playing_area & ~s->player));
 }
 
-int make_move(state *s, stones_t move, int *num_kill) {
+int make_move(state *s, const stones_t move, int *num_kill) {
     stones_t old_player = s->player;
     if (!move) {
         if (s->ko){
@@ -377,26 +378,23 @@ int make_move(state *s, stones_t move, int *num_kill) {
     // }
     stones_t kill = 0;
     stones_t empty = s->playing_area & ~s->player;
+    // Killing targets with external liberties would produce a random number of extra prisoners.
+    // Fix it so that target kills give no prisoners.
+    #define KILL_CHAIN \
+    if (!liberties(chain, empty) && !(chain & s->immortal)) {\
+        if (!(chain & s->target)) {\
+            kill |= chain;\
+        }\
+        s->opponent ^= chain;\
+    }
     stones_t chain = flood(move >> V_SHIFT, s->opponent);
-    if (!liberties(chain, empty) && !(chain & s->immortal)) {
-        kill |= chain;
-        s->opponent ^= chain;
-    }
+    KILL_CHAIN
     chain = flood(move << V_SHIFT, s->opponent);
-    if (!liberties(chain, empty) && !(chain & s->immortal)) {
-        kill |= chain;
-        s->opponent ^= chain;
-    }
+    KILL_CHAIN
     chain = flood((move >> H_SHIFT) & WEST_BLOCK, s->opponent);
-    if (!liberties(chain, empty) && !(chain & s->immortal)) {
-        kill |= chain;
-        s->opponent ^= chain;
-    }
+    KILL_CHAIN
     chain = flood((move & WEST_BLOCK) << H_SHIFT, s->opponent);
-    if (!liberties(chain, empty) && !(chain & s->immortal)) {
-        kill |= chain;
-        s->opponent ^= chain;
-    }
+    KILL_CHAIN
 
     *num_kill = popcount(kill);
     if (*num_kill == 1) {
@@ -423,7 +421,7 @@ int make_move(state *s, stones_t move, int *num_kill) {
     return 1;
 }
 
-int is_legal(state *s) {
+int is_legal(const state *s) {
     stones_t p;
     stones_t chain;
     stones_t player = s->player;
@@ -493,7 +491,7 @@ static stones_t PLAYER_BLOCKS[243] = {0, 1, 0, 2, 3, 2, 0, 1, 0, 4, 5, 4, 6, 7, 
 static stones_t OPPONENT_BLOCKS[243] = {0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 0, 0, 1, 0, 0, 1, 2, 2, 3, 0, 0, 1, 0, 0, 1, 2, 2, 3, 4, 4, 5, 4, 4, 5, 6, 6, 7, 8, 8, 9, 8, 8, 9, 10, 10, 11, 8, 8, 9, 8, 8, 9, 10, 10, 11, 12, 12, 13, 12, 12, 13, 14, 14, 15, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 16, 16, 17, 16, 16, 17, 18, 18, 19, 16, 16, 17, 16, 16, 17, 18, 18, 19, 20, 20, 21, 20, 20, 21, 22, 22, 23, 24, 24, 25, 24, 24, 25, 26, 26, 27, 24, 24, 25, 24, 24, 25, 26, 26, 27, 28, 28, 29, 28, 28, 29, 30, 30, 31};
 static size_t BLOCK_KEYS[32] = {0, 1, 3, 4, 9, 10, 12, 13, 27, 28, 30, 31, 36, 37, 39, 40, 81, 82, 84, 85, 90, 91, 93, 94, 108, 109, 111, 112, 117, 118, 120, 121};
 
-int from_key(state *s, state_info *si, size_t key) {
+int from_key(state *s, const state_info *si, size_t key) {
     stones_t fixed = s->target | s->immortal;
     s->player &= fixed;
     s->opponent &= fixed;
@@ -525,7 +523,7 @@ int from_key(state *s, state_info *si, size_t key) {
     return is_legal(s);
 }
 
-size_t to_key(state *s, state_info *si) {
+size_t to_key(const state *s, const state_info *si) {
     size_t key = 0;
     for (int i = si->num_blocks - 1; i >= 0; i--) {
         size_t e = si->exponents[i];
@@ -549,7 +547,7 @@ size_t to_key(state *s, state_info *si) {
     return key;
 }
 
-size_t key_size(state_info *si) {
+size_t key_size(const state_info *si) {
     size_t size = 1;
     for (int i = si->num_blocks - 1; i >= 0; i--) {
         size *= si->exponents[i];
@@ -760,7 +758,7 @@ void mirror_d_full(state *s) {
     snap(s);
 }
 
-void mirror_v(state *s, state_info *si) {
+void mirror_v(state *s, const state_info *si) {
     if (si->height == 7) {
         s->player = s_mirror_v(s->player);
         s->opponent = s_mirror_v(s->opponent);
@@ -793,7 +791,7 @@ void mirror_v(state *s, state_info *si) {
     }
 }
 
-void mirror_h(state *s, state_info *si) {
+void mirror_h(state *s, const state_info *si) {
     if (si->width == 9) {
         s->player = s_mirror_h(s->player);
         s->opponent = s_mirror_h(s->opponent);
@@ -842,7 +840,7 @@ void mirror_d(state *s) {
     s->ko = s_mirror_d(s->ko);
 }
 
-int less_than(state *a, state *b, state_info *si) {
+int less_than(const state *a, const state *b, const state_info *si) {
     stones_t a_player = a->player & si->internal;
     stones_t b_player = b->player & si->internal;
     if (a_player < b_player) {
@@ -878,7 +876,7 @@ int less_than(state *a, state *b, state_info *si) {
     return 0;
 }
 
-void normalize_external(state *s, state_info *si) {
+void normalize_external(state *s, const state_info *si) {
     for (int i = 0; i < si->num_external; i++) {
         stones_t external = si->externals[i];
         int num_filled = popcount(external & (s->player | s->opponent));
@@ -895,7 +893,7 @@ void normalize_external(state *s, state_info *si) {
     }
 }
 
-void canonize(state *s, state_info *si) {
+void canonize(state *s, const state_info *si) {
     if (si->color_symmetry) {
         s->white_to_play = 0;
     }
@@ -948,7 +946,7 @@ void canonize(state *s, state_info *si) {
     }
 }
 
-int is_canonical(state *s, state_info *si) {
+int is_canonical(const state *s, const state_info *si) {
     if (si->color_symmetry) {
         if (s->white_to_play) {
             return 0;
@@ -1046,10 +1044,13 @@ void init_state(state *s, state_info *si) {
     process_external(si, s->player & s->target, s->opponent & s->immortal, s->playing_area);
     process_external(si, s->opponent & s->target, s->player & s->immortal, s->playing_area);
 
+    stones_t external = 0;
     for (int i = 0;i < si->num_external; i++) {
         si->external_sizes[i] = popcount(si->externals[i]) + 1;
+        external |= si->externals[i];
         open ^= si->externals[i];
     }
+    si->external = external;
     si->internal = open;
 
     si->num_blocks = 0;

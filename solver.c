@@ -81,15 +81,7 @@ void endstate(solution *sol, state *s, node_value parent_v, int turn, int low_pl
             size_t child_layer;
             size_t child_key = to_key_s(sol, child, &child_layer);
             node_value child_v = negamax_node(sol, child, child_key, child_layer, 0);
-            node_value child_v_p = child_v;
-            if (sol->count_prisoners) {
-                if (child_v_p.low > -TARGET_SCORE && child_v_p.low < TARGET_SCORE) {
-                    child_v_p.low = child_v_p.low - prisoners;
-                }
-                if (child_v_p.high > -TARGET_SCORE && child_v_p.high < TARGET_SCORE) {
-                    child_v_p.high = child_v_p.high - prisoners;
-                }
-            }
+            node_value child_v_p = add_prisoners(sol, child_v, prisoners);
             int is_best_child = (-child_v_p.high == parent_v.low && child_v_p.high_distance + 1 == parent_v.low_distance);
             is_best_child = low_player ? is_best_child : (-child_v_p.low == parent_v.high && child_v_p.low_distance + 1 == parent_v.high_distance);
             if (is_best_child) {
@@ -313,8 +305,8 @@ int main(int argc, char *argv[]) {
     printf("Total positions %zu\n", total_legal);
     printf("Total unique positions %zu\n", num_states);
 
-    node_value **base_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
-    for (size_t i = 0; i < num_layers; i++) {
+    node_value **base_nodes = (node_value**) malloc(sol->num_layers * sizeof(node_value*));
+    for (size_t i = 0; i < sol->num_layers; i++) {
         base_nodes[i] = (node_value*) malloc(num_states * sizeof(node_value));
     }
     value_t *leaf_nodes = (value_t*) malloc(num_states * sizeof(value_t));
@@ -333,7 +325,7 @@ int main(int argc, char *argv[]) {
         // size_t layer;
         // assert(to_key_s(sol, s, &layer) == key);
         sol->leaf_nodes[i] = 0;
-        for (size_t k = 0; k < num_layers; k++) {
+        for (size_t k = 0; k < sol->num_layers; k++) {
             (sol->base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
         for (int j = 0; j < STATE_SIZE; j++) {
@@ -355,15 +347,15 @@ int main(int argc, char *argv[]) {
 
     finalize_lin_dict(sol->ko_ld);
 
-    node_value **ko_nodes = (node_value**) malloc(num_layers * sizeof(node_value*));
+    node_value **ko_nodes = (node_value**) malloc(sol->num_layers * sizeof(node_value*));
     sol->ko_nodes = ko_nodes;
-    for (size_t i = 0; i < num_layers; i++) {
+    for (size_t i = 0; i < sol->num_layers; i++) {
         sol->ko_nodes[i] = (node_value*) malloc(sol->ko_ld->num_keys * sizeof(node_value));
     }
     printf("Unique positions with ko %zu\n", sol->ko_ld->num_keys);
 
     for (size_t i = 0; i < sol->ko_ld->num_keys; i++) {
-        for (size_t k = 0; k < num_layers; k++) {
+        for (size_t k = 0; k < sol->num_layers; k++) {
             sol->ko_nodes[k][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }
     }
@@ -400,7 +392,8 @@ int main(int argc, char *argv[]) {
         *new_s = *s;
         endstate(sol, new_s, sol->base_nodes[zero_layer][i], 0, 1);
 
-        // Using a flood of life so that partially dead nakade won't give extra points.
+        // Use a flood of life so that partially dead nakade won't give extra points.
+        // Note while this won't mark dead groups as alive, it can treat living nakade stones as dead.
         stones_t player_alive = flood(new_s->player, s->player);
         stones_t opponent_alive = flood(new_s->opponent, s->opponent);
 
@@ -430,6 +423,9 @@ int main(int argc, char *argv[]) {
             score = -TARGET_SCORE;
         }
         else {
+            // Subtract friendly stones on the board from territory.
+            player_territory &= ~s->player;
+            opponent_territory &= ~s->opponent;
             score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
         }
 
@@ -443,7 +439,7 @@ int main(int argc, char *argv[]) {
     // fclose(f);
 
     // Clear the rest of the tree.
-    for (size_t j = 0; j < num_layers; j++) {
+    for (size_t j = 0; j < sol->num_layers; j++) {
         for (size_t i = 0; i < num_states; i++) {
             sol->base_nodes[j][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
         }

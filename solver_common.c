@@ -127,6 +127,19 @@ size_t to_key_s(solution *sol, state *s, size_t *layer) {
     return key;
 }
 
+node_value add_prisoners(solution *sol, node_value v, int prisoners) {
+    if (sol->count_prisoners) {
+        // TODO: assert no overflows.
+        if (v.low > VALUE_MIN && v.low < VALUE_MAX) {
+            v.low = v.low - prisoners;
+        }
+        if (v.high > VALUE_MIN && v.high < VALUE_MAX) {
+            v.high = v.high - prisoners;
+        }
+    }
+    return v;
+}
+
 node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int depth) {
     // size_t l;
     // assert(to_key_s(sol, s, &l) == key);
@@ -176,15 +189,7 @@ node_value negamax_node(solution *sol, state *s, size_t key, size_t layer, int d
             size_t child_layer;
             size_t child_key = to_key_s(sol, child, &child_layer);
             node_value child_v = negamax_node(sol, child, child_key, child_layer, depth - 1);
-            if (sol->count_prisoners) {
-                // TODO: assert no overflows.
-                if (child_v.low > VALUE_MIN && child_v.low < VALUE_MAX) {
-                    child_v.low = child_v.low - prisoners;
-                }
-                if (child_v.high > VALUE_MIN && child_v.high < VALUE_MAX) {
-                    child_v.high = child_v.high - prisoners;
-                }
-            }
+            child_v = add_prisoners(sol, child_v, prisoners);
             v = negamax(v, child_v);
         }
     }
