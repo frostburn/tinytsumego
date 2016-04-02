@@ -198,6 +198,27 @@ cho553->immortal = cho553->opponent;
 
 cho553->opponent |= liberties(one(2, 1), cho553->playing_area);
 
+state cho554_;
+state *cho554 = &cho554_;
+sscanf_state("9223372036854775807 4267058413616 1886396416 0 0 0 0 0 0", cho554);
+cho554->playing_area = rectangle(6, 5);
+cho554->target = cho554->opponent;
+cho554->immortal = cho554->player;
+
+state cho558_;
+state *cho558 = &cho558_;
+sscanf_state("9223372036854775807 1881149440 2185146228826112 0 0 0 0 0 0", cho558);
+cho558->playing_area = rectangle(6, 6);
+cho558->target = cho558->opponent;
+cho558->immortal = cho558->player;
+
+state cho571_;
+state *cho571 = &cho571_;
+sscanf_state("9223372036854775807 139320111104 2185008789864448 0 0 0 0 0 0", cho571);
+cho571->playing_area = rectangle(6, 6);
+cho571->target = cho571->opponent;
+cho571->immortal = cho571->player;
+
 state cho427_ = (state) {
     rectangle(8, 4),
     south(south(east(rectangle(3, 1)))),
@@ -309,6 +330,20 @@ stones_t es43_temp = rectangle(9, 7) ^ rectangle(8, 6) ^ one(7, 5);
 edge_semeai_4x3->player |= es43_temp;
 edge_semeai_4x3->immortal |= es43_temp;
 
+state corner_14_;
+state *corner_14 = &corner_14_;
+sscanf_state("9223372036854775807 2292057341031383104 484798636048 0 0 0 0 0 0", corner_14);
+corner_14->playing_area = rectangle(7, 7);
+corner_14->target = corner_14->opponent;
+corner_14->immortal = corner_14->player;
+
+state edge_14_;
+state *edge_14 = &edge_14_;
+sscanf_state("9223372036854775807 4600541437287793152 4136876147778 0 0 0 0 0 0", edge_14);
+edge_14->playing_area = rectangle(8, 7);
+edge_14->target = edge_14->opponent;
+edge_14->immortal = edge_14->player;
+
 state corner_4x4_ = (state) {
     rectangle(7, 7),
     rectangle(7, 7) ^ rectangle(5, 5),
@@ -329,14 +364,21 @@ state *edge_4x4 = &edge_4x4_;
 edge_4x4->target = edge_4x4->opponent;
 edge_4x4->immortal = edge_4x4->player;
 
+// state center_4x4_ = (state) {
+//     rectangle(8, 6),
+//     (rectangle(8, 6) ^ east(rectangle(6, 6))) & ~south(south(rectangle(8, 2))),
+//     east(rectangle(6, 6) ^ south(east(rectangle(4, 4)))),
+// };
+// state *center_4x4 = &center_4x4_;
+// center_4x4->target = center_4x4->opponent;
+// center_4x4->immortal = center_4x4->player;
+
 state center_4x4_ = (state) {
-    rectangle(8, 6),
-    (rectangle(8, 6) ^ east(rectangle(6, 6))) & ~south(south(rectangle(8, 2))),
-    east(rectangle(6, 6) ^ south(east(rectangle(4, 4)))),
+    rectangle(6, 6),
+    rectangle(6, 6) ^ south(east(rectangle(4, 4))),
 };
 state *center_4x4 = &center_4x4_;
-center_4x4->target = center_4x4->opponent;
-center_4x4->immortal = center_4x4->player;
+center_4x4->target = center_4x4->player;
 
 state target_test_ = (state) {
     rectangle(5, 1),
@@ -361,6 +403,11 @@ const tsumego_info tsumego_infos[] = {
     {"cho5", cho5},
     {"cho538", cho538},
     {"cho551", cho551},
+    {"cho552", cho552},
+    {"cho553", cho553},
+    {"cho554", cho554},
+    {"cho558", cho558},
+    {"cho571", cho571},
     {"bulky_ten", bulky_ten},
     {"wut", wut},
     {"corner_3x3", corner_3x3},
@@ -369,6 +416,8 @@ const tsumego_info tsumego_infos[] = {
     {"edge_4x3", edge_4x3},
     {"edge_semeai_4x3", edge_semeai_4x3},
     {"center_4x3", center_4x3},
+    {"corner_14", corner_14},
+    {"edge_14", edge_14},
     {"center_4x4", center_4x4},
     {"target_test", target_test},
     {"nakade_test", nakade_test},
