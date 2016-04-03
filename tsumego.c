@@ -209,15 +209,15 @@ state cho558_;
 state *cho558 = &cho558_;
 sscanf_state("9223372036854775807 1881149440 2185146228826112 0 0 0 0 0 0", cho558);
 cho558->playing_area = rectangle(6, 6);
-cho558->target = cho558->opponent;
-cho558->immortal = cho558->player;
+cho558->target = cho558->player;
+cho558->immortal = cho558->opponent;
 
 state cho571_;
 state *cho571 = &cho571_;
 sscanf_state("9223372036854775807 139320111104 2185008789864448 0 0 0 0 0 0", cho571);
 cho571->playing_area = rectangle(6, 6);
-cho571->target = cho571->opponent;
-cho571->immortal = cho571->player;
+cho571->target = cho571->player;
+cho571->immortal = cho571->opponent;
 
 state cho427_ = (state) {
     rectangle(8, 4),
