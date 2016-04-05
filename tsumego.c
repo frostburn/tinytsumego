@@ -90,6 +90,23 @@ cho5->playing_area = rectangle(6, 6);
 cho5->target = cho5->opponent;
 cho5->immortal = cho5->player;
 
+state cho427_ = (state) {
+    rectangle(8, 4),
+    south(south(east(rectangle(3, 1)))),
+    south(south(east(rectangle(7, 2) ^ rectangle(3, 1) ^ one(4, 0)))),
+    0,
+    0,
+    0,
+    0,
+    0,
+};
+state *cho427 = &cho427_;
+cho427->target = cho427->player;
+cho427->immortal = cho427->opponent;
+
+cho427->player |= tvo(7, 0);
+cho427->immortal |= tvo(7, 0);
+
 state cho529_532_ = (state) {
     rectangle(6, 6),
     south(east(rectangle(5, 5))) & ~rectangle(4, 4),
@@ -219,22 +236,33 @@ cho571->playing_area = rectangle(6, 6);
 cho571->target = cho571->player;
 cho571->immortal = cho571->opponent;
 
-state cho427_ = (state) {
-    rectangle(8, 4),
-    south(south(east(rectangle(3, 1)))),
-    south(south(east(rectangle(7, 2) ^ rectangle(3, 1) ^ one(4, 0)))),
-    0,
-    0,
-    0,
-    0,
-    0,
-};
-state *cho427 = &cho427_;
-cho427->target = cho427->player;
-cho427->immortal = cho427->opponent;
+state cho580_;
+state *cho580 = &cho580_;
+sscanf_state("9223372036854775807 4267331043328 1612722192 0 0 0 0 0 0", cho580);
+cho580->playing_area = rectangle(6, 5);
+cho580->target = cho580->opponent;
+cho580->immortal = cho580->player;
 
-cho427->player |= tvo(7, 0);
-cho427->immortal |= tvo(7, 0);
+state gokyo1_9_;
+state *gokyo1_9 = &gokyo1_9_;
+sscanf_state("9223372036854775807 270008320 4268675317760 0 0 0 0 0 0", gokyo1_9);
+gokyo1_9->playing_area = rectangle(6, 5);
+gokyo1_9->target = gokyo1_9->player;
+gokyo1_9->immortal = gokyo1_9->opponent;
+
+state xxqj8_;
+state *xxqj8 = &xxqj8_;
+sscanf_state("9223372036854775807 7872512 8671824232448 0 0 0 0 0 0", xxqj8);
+xxqj8->playing_area = rectangle(7, 5);
+xxqj8->target = xxqj8->player;
+xxqj8->immortal = xxqj8->opponent;
+
+state xxqj100_;
+state *xxqj100 = &xxqj100_;
+sscanf_state("9223372036854775807 4600545852682784511 146864611328 0 0 0 0 0 0", xxqj100);
+xxqj100->playing_area = rectangle(8, 7);
+xxqj100->target = xxqj100->opponent;
+xxqj100->immortal = xxqj100->player;
 
 state rabbity_ = (state) {
     rectangle(5, 4),
@@ -282,6 +310,19 @@ state test_ = (state) {
 };
 state *test = &test_;
 test->immortal = test->player;
+
+state monkey_connection_;
+state *monkey_connection = &monkey_connection_;
+sscanf_state("9223372036854775807 17860608 17059022336 0 0 0 0 0 0", monkey_connection);
+monkey_connection->playing_area = rectangle(7, 4);
+monkey_connection->target = tvo(2, 1);
+monkey_connection->immortal = monkey_connection->opponent | tvo(6, 1);
+
+state monkey_jump_;
+state *monkey_jump = &monkey_jump_;
+sscanf_state("9223372036854775807 787968 66060288 0 0 0 0 0 0", monkey_jump);
+monkey_jump->playing_area = rectangle(8, 3);
+monkey_jump->immortal = monkey_jump->opponent | monkey_jump->player;
 
 state corner_3x3_ = (state) {
     rectangle(6, 6),
@@ -380,6 +421,11 @@ state center_4x4_ = (state) {
 state *center_4x4 = &center_4x4_;
 center_4x4->target = center_4x4->player;
 
+state ring_5x5_ = (state) {
+    rectangle(5, 5) ^ south(east(rectangle(3, 3)))
+};
+state *ring_5x5 = &ring_5x5_;
+
 state target_test_ = (state) {
     rectangle(5, 1),
     one(2, 0),
@@ -408,6 +454,12 @@ const tsumego_info tsumego_infos[] = {
     {"cho554", cho554},
     {"cho558", cho558},
     {"cho571", cho571},
+    {"cho580", cho580},
+    {"gokyo1_9", gokyo1_9},
+    {"xxqj8", xxqj8},
+    {"xxqj100", xxqj100},
+    {"monkey_connection", monkey_connection},
+    {"monkey_jump", monkey_jump},
     {"bulky_ten", bulky_ten},
     {"wut", wut},
     {"corner_3x3", corner_3x3},
@@ -418,6 +470,7 @@ const tsumego_info tsumego_infos[] = {
     {"center_4x3", center_4x3},
     {"corner_14", corner_14},
     {"edge_14", edge_14},
+    {"ring_5x5", ring_5x5},
     {"center_4x4", center_4x4},
     {"target_test", target_test},
     {"nakade_test", nakade_test},

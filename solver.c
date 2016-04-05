@@ -51,11 +51,12 @@ void iterate(solution *sol, char *filename) {
         }
         size_t base_layer;
         size_t base_key = to_key_s(sol, sol->base_state, &base_layer);
-        print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
 
+        printf("Saving...\n");  // TODO: Prevent data corruption by catching Ctrl+C.
         FILE *f = fopen(filename, "wb");
         save_solution(sol, f);
         fclose(f);
+        print_node(negamax_node(sol, sol->base_state, base_key, base_layer, 0));
         // Verify solution integrity. For debugging only. Leaks memory.
         // char *buffer = file_to_buffer(filename);
         // buffer = load_solution(sol, buffer, 0);
