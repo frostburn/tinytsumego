@@ -324,6 +324,14 @@ sscanf_state("9223372036854775807 787968 66060288 0 0 0 0 0 0", monkey_jump);
 monkey_jump->playing_area = rectangle(8, 3);
 monkey_jump->immortal = monkey_jump->opponent | monkey_jump->player;
 
+state cranes_nest_;
+state *cranes_nest = &cranes_nest_;
+sscanf_state("9223372036854775807 8721 2132585480192 0 0 0 0 0 0", cranes_nest);
+cranes_nest->playing_area = rectangle(5, 5);
+cranes_nest->immortal = cranes_nest->opponent | cranes_nest->player;
+cranes_nest->opponent |= east(rectangle(3, 1));
+cranes_nest->target = east(rectangle(3, 1));
+
 state corner_3x3_ = (state) {
     rectangle(6, 6),
     rectangle(6, 6) ^ rectangle(5, 5) ^ south(south(east(east(rectangle(3, 3) ^ rectangle(2, 2))))),
@@ -421,10 +429,22 @@ state center_4x4_ = (state) {
 state *center_4x4 = &center_4x4_;
 center_4x4->target = center_4x4->player;
 
+state corner_5x3_;
+state *corner_5x3 = &corner_5x3_;
+sscanf_state("9223372036854775807 8985226235674752 8464121888 0 0 0 0 0 0", corner_5x3);
+corner_5x3->playing_area = rectangle(8, 6);
+corner_5x3->target = corner_5x3->opponent;
+corner_5x3->immortal = corner_5x3->player;
+
 state ring_5x5_ = (state) {
     rectangle(5, 5) ^ south(east(rectangle(3, 3)))
 };
 state *ring_5x5 = &ring_5x5_;
+
+state cut_5x4_ = (state) {
+    cross(south(east(rectangle(3, 2))))
+};
+state *cut_5x4 = &cut_5x4_;
 
 state target_test_ = (state) {
     rectangle(5, 1),
@@ -460,6 +480,7 @@ const tsumego_info tsumego_infos[] = {
     {"xxqj100", xxqj100},
     {"monkey_connection", monkey_connection},
     {"monkey_jump", monkey_jump},
+    {"cranes_nest", cranes_nest},
     {"bulky_ten", bulky_ten},
     {"wut", wut},
     {"corner_3x3", corner_3x3},
@@ -470,7 +491,9 @@ const tsumego_info tsumego_infos[] = {
     {"center_4x3", center_4x3},
     {"corner_14", corner_14},
     {"edge_14", edge_14},
+    {"corner_5x3", corner_5x3},
     {"ring_5x5", ring_5x5},
+    {"cut_5x4", cut_5x4},
     {"center_4x4", center_4x4},
     {"target_test", target_test},
     {"nakade_test", nakade_test},
