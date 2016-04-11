@@ -436,6 +436,13 @@ corner_5x3->playing_area = rectangle(8, 6);
 corner_5x3->target = corner_5x3->opponent;
 corner_5x3->immortal = corner_5x3->player;
 
+state edge_5x3_;
+state *edge_5x3 = &edge_5x3_;
+sscanf_state("9223372036854775807 17996875043045888 34125448322 0 0 0 0 0 0", edge_5x3);
+edge_5x3->playing_area = rectangle(9, 6);
+edge_5x3->target = edge_5x3->opponent;
+edge_5x3->immortal = edge_5x3->player;
+
 state ring_5x5_ = (state) {
     rectangle(5, 5) ^ south(east(rectangle(3, 3)))
 };
@@ -492,6 +499,7 @@ const tsumego_info tsumego_infos[] = {
     {"corner_14", corner_14},
     {"edge_14", edge_14},
     {"corner_5x3", corner_5x3},
+    {"edge_5x3", edge_5x3},
     {"ring_5x5", ring_5x5},
     {"cut_5x4", cut_5x4},
     {"center_4x4", center_4x4},
