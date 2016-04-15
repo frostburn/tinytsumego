@@ -29,6 +29,41 @@ solution* mmap_solution(char *filename) {
     return sol;
 }
 
+// Unfortunately the solver takes a shortcut and uses color information to figure out parity.
+// We don't want that here.
+
+int has_substate(solution *sol, state *s, int *colors_swapped) {
+    state *b = sol->base_state;
+    if (b->playing_area != s->playing_area) {
+        return 0;
+    }
+    if (b->target != s->target) {
+        return 0;
+    }
+    if (b->immortal != s->immortal) {
+        return 0;
+    }
+    stones_t b_pt = b->target & b->player;
+    stones_t b_ot = b->target & b->opponent;
+    stones_t b_pi = b->immortal & b->player;
+    stones_t b_oi = b->immortal & b->opponent;
+
+    stones_t s_pt = s->target & s->player;
+    stones_t s_ot = s->target & s->opponent;
+    stones_t s_pi = s->immortal & s->player;
+    stones_t s_oi = s->immortal & s->opponent;
+
+    if (b_pt == s_pt && b_ot == s_ot && b_pi == s_pi && b_oi == s_oi) {
+        *colors_swapped = b->white_to_play != s->white_to_play;
+        return 1;
+    }
+    if (b_pt == s_ot && b_ot == s_pt && b_pi == s_oi && b_oi == s_pi) {
+        *colors_swapped = b->white_to_play == s->white_to_play;
+        return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     int num_solutions = argc - 1;
     solution **sols = (solution**) malloc(num_solutions * sizeof(solution*));
@@ -66,12 +101,11 @@ int main(int argc, char *argv[]) {
         sscanf_state(in, s);
         int solution_found = 0;
         for (int i = 0; i < num_solutions; i++) {
-            // TODO: Check color of target and immortal too.
-            if (
-                (sols[i]->base_state->playing_area == s->playing_area) &&
-                (sols[i]->base_state->target == s->target) &&
-                (sols[i]->base_state->immortal == s->immortal)
-            ) {
+            int colors_swapped;
+            if (has_substate(sols[i], s, &colors_swapped)) {
+                if (colors_swapped) {
+                    s->white_to_play = !s->white_to_play;
+                }
                 size_t layer;
                 size_t key = to_key_s(sols[i], s, &layer);
                 int passes_valid = s->passes <= 2;

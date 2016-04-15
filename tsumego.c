@@ -243,6 +243,20 @@ cho580->playing_area = rectangle(6, 5);
 cho580->target = cho580->opponent;
 cho580->immortal = cho580->player;
 
+state cho582_;
+state *cho582 = &cho582_;
+sscanf_state("9223372036854775807 2185698127921152 1885339648 0 0 0 0 0 0", cho582);
+cho582->playing_area = rectangle(6, 6);
+cho582->target = cho582->opponent;
+cho582->immortal = cho582->player;
+
+state cho589_;
+state *cho589 = &cho589_;
+sscanf_state("9223372036854775807 4335912108032 1879048192 0 0 0 0 0 0", cho589);
+cho589->playing_area = rectangle(6, 5);
+cho589->target = cho589->opponent;
+cho589->immortal = cho589->player;
+
 state gokyo1_9_;
 state *gokyo1_9 = &gokyo1_9_;
 sscanf_state("9223372036854775807 270008320 4268675317760 0 0 0 0 0 0", gokyo1_9);
@@ -482,6 +496,8 @@ const tsumego_info tsumego_infos[] = {
     {"cho558", cho558},
     {"cho571", cho571},
     {"cho580", cho580},
+    {"cho582", cho582},
+    {"cho589", cho589},
     {"gokyo1_9", gokyo1_9},
     {"xxqj8", xxqj8},
     {"xxqj100", xxqj100},
