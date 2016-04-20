@@ -13,6 +13,9 @@ typedef struct node_value
     distance_t high_distance;
 } node_value;
 
+// This is for the binary interface (no padding)
+#define SIZE_OF_NODE_VALUE (2 * sizeof(value_t) + 2 * sizeof(distance_t))
+
 void print_node(node_value nv) {
     printf("node_value(%d, %d, %d, %d)\n", nv.low, nv.high, nv.low_distance, nv.high_distance);
 }
