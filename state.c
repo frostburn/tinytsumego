@@ -46,6 +46,9 @@ typedef struct state
     int white_to_play;
 } state;
 
+// This is for the binary interface (no padding)
+#define SIZE_OF_STATE (6 * sizeof(stones_t) + 3 * sizeof(int))
+
 typedef struct state_info
 {
     int size;
