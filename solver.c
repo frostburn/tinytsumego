@@ -94,6 +94,74 @@ void endstate(solution *sol, state *s, node_value parent_v, int turn, int low_pl
     }
 }
 
+// Japanese leaf state calculation from capture data.
+// We could store territory for the UI, it takes too much space.
+void calculate_leaves(solution *sol) {
+    state s_;
+    state *s = &s_;
+    size_t key;
+    size_t zero_layer = abs(sol->base_state->ko_threats);
+    state new_s_;
+    state *new_s = &new_s_;
+    key = sol->d->min_key;
+    size_t num_states = num_keys(sol->d);
+    for (size_t i = 0; i < num_states; i++) {
+        assert(from_key_s(sol, s, key, zero_layer));
+
+        *new_s = *s;
+        node_value v = negamax_node(sol, s, key, zero_layer, 0);
+        node_value v_b = sol->base_nodes[zero_layer][i];
+        assert(equal(v, v_b));
+        endstate(sol, new_s, v, 0, 1);
+
+        // Use a flood of life so that partially dead nakade won't give extra points.
+        // Note while this won't mark dead groups as alive, it can treat living nakade stones as dead.
+        stones_t player_alive = flood(new_s->player, s->player);
+        stones_t opponent_alive = flood(new_s->opponent, s->opponent);
+
+        int score;
+
+        // First check if a target is not alive.
+        stones_t player_target = s->player & s->target;
+        stones_t opponent_target = s->opponent & s->target;
+        if (opponent_target & ~opponent_alive) {
+            // Make sure that both aren't dead.
+            assert(!(player_target & ~player_alive));
+            score = TARGET_SCORE;
+        }
+        else if (player_target & ~player_alive) {
+            score = -TARGET_SCORE;
+        }
+        else {
+            stones_t player_territory = 0;
+            stones_t opponent_territory = 0;
+            stones_t player_region_space = s->playing_area & ~player_alive;
+            stones_t opponent_region_space = s->playing_area & ~opponent_alive;
+            for (int j = 0; j < STATE_SIZE; j++) {
+                stones_t p = 1ULL << j;
+                stones_t region = flood(p, player_region_space);
+                player_region_space ^= region;
+                if (!(region & opponent_alive)) {
+                    player_territory |= region;
+                }
+                region = flood(p, opponent_region_space);
+                opponent_region_space ^= region;
+                if (!(region & player_alive)) {
+                    opponent_territory |= region;
+                }
+            }
+            // Subtract friendly stones on the board from territory.
+            player_territory &= ~s->player;
+            opponent_territory &= ~s->opponent;
+            score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
+        }
+
+        sol->leaf_nodes[i] = score;
+
+        key = next_key(sol->d, key);
+    }
+}
+
 static const char* tsumego_name = NULL;
 static int board_width = 0;
 static int board_height = 0;
@@ -163,7 +231,18 @@ typedef struct tsumego_info {
     state* state;
 } tsumego_info;
 
+void test();
+void repair(int argc, char *argv[]);
+
 int main(int argc, char *argv[]) {
+    #ifdef TEST
+        test();
+        return 0;
+    #endif
+    #ifdef REPAIR
+        repair(argc, argv);
+        return 0;
+    #endif
     int load_sol = 0;
     int resume_sol = 0;
     if (strcmp(argv[argc - 1], "load") == 0) {
@@ -380,64 +459,8 @@ int main(int argc, char *argv[]) {
     save_solution(sol, f);
     fclose(f);
 
-    // Japanese leaf state calculation.
-    // Store territory for UI. (Or maybe not. Takes too much space.)
-    // f = fopen("territory.dat", "wb");
-    size_t zero_layer = abs(sol->base_state->ko_threats);
-    state new_s_;
-    state *new_s = &new_s_;
-    key = sol->d->min_key;
-    for (size_t i = 0; i < num_states; i++) {
-        assert(from_key_s(sol, s, key, zero_layer));
 
-        *new_s = *s;
-        endstate(sol, new_s, sol->base_nodes[zero_layer][i], 0, 1);
-
-        // Use a flood of life so that partially dead nakade won't give extra points.
-        // Note while this won't mark dead groups as alive, it can treat living nakade stones as dead.
-        stones_t player_alive = flood(new_s->player, s->player);
-        stones_t opponent_alive = flood(new_s->opponent, s->opponent);
-
-        stones_t player_territory = 0;
-        stones_t opponent_territory = 0;
-        stones_t player_region_space = s->playing_area & ~player_alive;
-        stones_t opponent_region_space = s->playing_area & ~opponent_alive;
-        for (int j = 0; j < STATE_SIZE; j++) {
-            stones_t p = 1ULL << j;
-            stones_t region = flood(p, player_region_space);
-            player_region_space ^= region;
-            if (!(region & opponent_alive)) {
-                player_territory |= region;
-            }
-            region = flood(p, opponent_region_space);
-            opponent_region_space ^= region;
-            if (!(region & player_alive)) {
-                opponent_territory |= region;
-            }
-        }
-
-        int score;
-        if (player_territory & s->target) {
-            score = TARGET_SCORE;
-        }
-        else if (opponent_territory & s->target) {
-            score = -TARGET_SCORE;
-        }
-        else {
-            // Subtract friendly stones on the board from territory.
-            player_territory &= ~s->player;
-            opponent_territory &= ~s->opponent;
-            score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
-        }
-
-        sol->leaf_nodes[i] = score;
-
-        // stones_t territory = player_territory | opponent_territory;
-        // fwrite((void*) &territory, sizeof(stones_t), 1, f);
-
-        key = next_key(sol->d, key);
-    }
-    // fclose(f);
+    calculate_leaves(sol);
 
     // Clear the rest of the tree.
     for (size_t j = 0; j < sol->num_layers; j++) {
@@ -567,4 +590,110 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+void test() {
+    solution sol_;
+    solution *sol = &sol_;
+    char *buffer = file_to_buffer("cho589_capture.dat");
+    buffer = load_solution(sol, buffer, 1);
+    state s_;
+    state *s = &s_;
+    // sscanf_state("4337799298623 4335912108032 1879319553 0 1879048192 4335912108032 0 0 0", s);
+    sscanf_state("4337799298623 4335918405632 1879319581 0 1879048192 4335912108032 0 0 0", s);
+    print_state(s);
+    size_t layer;
+    size_t key = to_key_s(sol, s, &layer);
+    // node_value v = negamax_node(sol, s, key, layer, 0);
+    // print_node(v);
+    // node_value v_b = sol->base_nodes[layer][key_index(sol->d, key)];
+    // print_node(v_b);
+    // endstate(sol, s, v, 0, 1);
+    // print_state(s);
+
+    state new_s_;
+    state *new_s = &new_s_;
+    *new_s = *s;
+    node_value v = negamax_node(sol, s, key, 0, 0);
+    endstate(sol, new_s, v, 0, 1);
+
+    print_state(new_s);
+
+    // Use a flood of life so that partially dead nakade won't give extra points.
+    // Note while this won't mark dead groups as alive, it can treat living nakade stones as dead.
+    stones_t player_alive = flood(new_s->player, s->player);
+    stones_t opponent_alive = flood(new_s->opponent, s->opponent);
+
+    print_stones(player_alive);
+    print_stones(opponent_alive);
+
+    int score;
+
+    // First check if a target is not alive.
+    stones_t player_target = s->player & s->target;
+    stones_t opponent_target = s->opponent & s->target;
+    if (opponent_target & ~opponent_alive) {
+        assert(!(player_target & ~player_alive));  // Both shouldn't be dead.
+        score = TARGET_SCORE;
+    }
+    else if (player_target & ~player_alive) {
+        score = -TARGET_SCORE;
+    }
+    else {
+        stones_t player_territory = 0;
+        stones_t opponent_territory = 0;
+        stones_t player_region_space = s->playing_area & ~player_alive;
+        stones_t opponent_region_space = s->playing_area & ~opponent_alive;
+        for (int j = 0; j < STATE_SIZE; j++) {
+            stones_t p = 1ULL << j;
+            stones_t region = flood(p, player_region_space);
+            player_region_space ^= region;
+            if (!(region & opponent_alive)) {
+                player_territory |= region;
+            }
+            region = flood(p, opponent_region_space);
+            opponent_region_space ^= region;
+            if (!(region & player_alive)) {
+                opponent_territory |= region;
+            }
+        }
+        // Subtract friendly stones on the board from territory.
+        player_territory &= ~s->player;
+        opponent_territory &= ~s->opponent;
+        score = popcount(player_territory) + popcount(player_territory & s->opponent) - popcount(opponent_territory) - popcount(opponent_territory & s->player);
+    }
+    printf("%d\n", score);
+}
+
+void repair(int argc, char *argv[]) {
+    if (argc != 2) {
+        printf("Please enter a filename.\n");
+        return;
+    }
+    char capture_filename[128];
+    char japanese_filename[128];
+    char temp_filename[128];
+    sprintf(capture_filename, "%s_capture.dat", argv[1]);
+    sprintf(japanese_filename, "%s_japanese.dat", argv[1]);
+    sprintf(temp_filename, "%s_temp.dat", argv[1]);
+
+
+    solution sol_;
+    solution *sol = &sol_;
+    char *buffer = file_to_buffer(capture_filename);
+    buffer = load_solution(sol, buffer, 1);
+    print_state(sol->base_state);
+    calculate_leaves(sol);
+
+    solution solj_;
+    solution *solj = &solj_;
+    buffer = file_to_buffer(japanese_filename);
+    buffer = load_solution(solj, buffer, 1);
+    print_state(solj->base_state);
+    solj->leaf_nodes = sol->leaf_nodes;
+
+    FILE *f = fopen(temp_filename, "wb");
+    save_solution(solj, f);
+    fclose(f);
+    printf("Done!\n");
 }
