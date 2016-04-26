@@ -188,6 +188,11 @@ int main(int argc, char *argv[]) {
     sols = (solution**) malloc(num_solutions * sizeof(solution*));
     for (int i = 0; i < num_solutions; i++) {
         sols[i] = mmap_solution(solution_names[i]);
+        #ifdef DEBUG
+            printf("%s\n", solution_names[i]);
+            printf("Number of unique positions: %zu\n", num_keys(sols[i]->d));
+            printf("Number of positions with ko: %zu\n", sols[i]->ko_ld->num_keys);
+        #endif
         repr_state(sols[i]->base_state);
         printf("%zu\n", sols[i]->num_layers);
     }

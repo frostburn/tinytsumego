@@ -257,6 +257,20 @@ cho589->playing_area = rectangle(6, 5);
 cho589->target = cho589->opponent;
 cho589->immortal = cho589->player;
 
+state cho592_;
+state *cho592 = &cho592_;
+sscanf_state("9223372036854775807 4267058413568 1883254784 0 0 0 0 0 0", cho592);
+cho592->playing_area = rectangle(6, 5);
+cho592->target = cho592->opponent;
+cho592->immortal = cho592->player;
+
+state cho596_;
+state *cho596 = &cho596_;
+sscanf_state("9223372036854775807 2218818772418560 4160749568 0 0 0 0 0 0", cho596);
+cho596->playing_area = rectangle(6, 6);
+cho596->target = cho596->opponent;
+cho596->immortal = cho596->player;
+
 state gokyo1_9_;
 state *gokyo1_9 = &gokyo1_9_;
 sscanf_state("9223372036854775807 270008320 4268675317760 0 0 0 0 0 0", gokyo1_9);
@@ -492,6 +506,27 @@ state *nakade_test = &nakade_test_;
 nakade_test->target = nakade_test->opponent;
 nakade_test->immortal = nakade_test->player;
 
+state closed_corner_4x4_ = (state) {
+    rectangle(6, 6),
+    rectangle(6, 6) ^ (rectangle(4, 4) | one(4, 0) | one(0, 4)),
+};
+state *closed_corner_4x4 = &closed_corner_4x4_;
+closed_corner_4x4->immortal = closed_corner_4x4->player;
+
+state closed_corner_5x3_ = (state) {
+    rectangle(7, 5),
+    rectangle(7, 5) ^ (rectangle(5, 3) | one(5, 0) | one(0, 3)),
+};
+state *closed_corner_5x3 = &closed_corner_5x3_;
+closed_corner_5x3->immortal = closed_corner_5x3->player;
+
+state closed_corner_8x2_ = (state) {
+    rectangle(9, 4),
+    rectangle(9, 4) ^ (rectangle(8, 2) | one(0, 2)),
+};
+state *closed_corner_8x2 = &closed_corner_8x2_;
+closed_corner_8x2->immortal = closed_corner_8x2->player;
+
 const tsumego_info tsumego_infos[] = {
     {"cho1", cho1_4},
     {"cho5", cho5},
@@ -505,6 +540,8 @@ const tsumego_info tsumego_infos[] = {
     {"cho580", cho580},
     {"cho582", cho582},
     {"cho589", cho589},
+    {"cho592", cho592},
+    {"cho596", cho596},
     {"gokyo1_9", gokyo1_9},
     {"xxqj8", xxqj8},
     {"xxqj100", xxqj100},
@@ -529,5 +566,8 @@ const tsumego_info tsumego_infos[] = {
     {"center_4x4", center_4x4},
     {"target_test", target_test},
     {"nakade_test", nakade_test},
+    {"closed_corner_4x4", closed_corner_4x4},
+    {"closed_corner_5x3", closed_corner_5x3},
+    {"closed_corner_8x2", closed_corner_8x2},
     {NULL, NULL}
 };
