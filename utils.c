@@ -1,4 +1,4 @@
-char* file_to_buffer(char *filename) {
+char* file_to_buffer(const char *filename) {
     struct stat sb;
     stat(filename, &sb);
     char *buffer = (char*) malloc(sb.st_size * sizeof(char));

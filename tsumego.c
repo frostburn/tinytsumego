@@ -542,6 +542,7 @@ const tsumego_info tsumego_infos[] = {
     {"cho589", cho589},
     {"cho592", cho592},
     {"cho596", cho596},
+    {"corner_six_1", corner_six_1},
     {"gokyo1_9", gokyo1_9},
     {"xxqj8", xxqj8},
     {"xxqj100", xxqj100},

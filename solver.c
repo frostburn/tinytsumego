@@ -233,6 +233,7 @@ typedef struct tsumego_info {
 
 void test();
 void repair(int argc, char *argv[]);
+void upgrade(int argc, char *argv[]);
 
 int main(int argc, char *argv[]) {
     #ifdef TEST
@@ -243,6 +244,11 @@ int main(int argc, char *argv[]) {
         repair(argc, argv);
         return 0;
     #endif
+    #ifdef UPGRADE
+        upgrade(argc, argv);
+        return 0;
+    #endif
+
     int load_sol = 0;
     int resume_sol = 0;
     if (strcmp(argv[argc - 1], "load") == 0) {
@@ -694,6 +700,60 @@ void repair(int argc, char *argv[]) {
 
     FILE *f = fopen(temp_filename, "wb");
     save_solution(solj, f);
+    fclose(f);
+    printf("Done!\n");
+}
+
+void upgrade(int argc, char *argv[]) {
+    parse_args(argc - 1, argv + 1);
+
+    solution sol_;
+    solution *sol = &sol_;
+    char *buffer = file_to_buffer(tsumego_name);  // Not really a tsumego name. Needs extension too.
+    buffer = load_solution(sol, buffer, 1);
+
+    if (sol->si->color_symmetry) {
+        num_layers = 2 * abs(ko_threats) + 1;
+    }
+    else if (num_layers <= 0) {
+        num_layers = abs(ko_threats) + 1;
+    }
+
+    sol->base_nodes = (node_value**) realloc(sol->base_nodes, sol->num_layers * sizeof(node_value*));
+    sol->ko_nodes = (node_value**) realloc(sol->ko_nodes, sol->num_layers * sizeof(node_value*));
+
+    size_t zero_layer = abs(sol->base_state->ko_threats);
+    size_t new_zero_layer = abs(ko_threats);
+
+    sol->base_nodes[new_zero_layer] = sol->base_nodes[zero_layer];
+    sol->ko_nodes[new_zero_layer] = sol->ko_nodes[zero_layer];
+
+    sol->base_state->ko_threats = ko_threats;
+    sol->num_layers = num_layers;
+
+    size_t num_states = num_keys(sol->d);
+    for (size_t k = 0; k < sol->num_layers; k++) {
+        if (k == new_zero_layer) {
+            continue;
+        }
+        sol->base_nodes[k] = (node_value*) malloc(num_states * sizeof(node_value));
+        for (size_t i = 0; i < num_states; i++) {
+            (sol->base_nodes[k])[i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
+    }
+
+    for (size_t k = 0; k < sol->num_layers; k++) {
+        if (k == new_zero_layer) {
+            continue;
+        }
+        sol->ko_nodes[k] = (node_value*) malloc(sol->ko_ld->num_keys * sizeof(node_value));
+        for (size_t i = 0; i < sol->ko_ld->num_keys; i++) {
+            sol->ko_nodes[k][i] = (node_value) {VALUE_MIN, VALUE_MAX, DISTANCE_MAX, DISTANCE_MAX};
+        }
+    }
+
+    FILE *f = fopen(tsumego_name, "wb");
+    save_solution(sol, f);
     fclose(f);
     printf("Done!\n");
 }
