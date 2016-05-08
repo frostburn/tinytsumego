@@ -5,6 +5,8 @@
 #include <unistd.h>
 // TODO <signal.h> catch Ctrl+C
 
+#include <omp.h>
+
 // No headers? Are you serious?!
 #define MAIN
 #include "state.c"
@@ -14,12 +16,9 @@
 #include "utils.c"
 
 // Where's the makefile? Oh, you gotta be kidding me.
-// gcc -std=gnu99 -Wall -O3 solver.c -o solver; solver 4 3
+// gcc -std=gnu99 -Wall -O3 solver.c -o solver -fopenmp; solver 4 3
 
 void iterate(solution *sol, char *filename) {
-    state s_;
-    state *s = &s_;
-
     size_t num_states = num_keys(sol->d);
 
     int changed = 1;
@@ -28,24 +27,36 @@ void iterate(solution *sol, char *filename) {
         for (size_t j = 0; j < sol->num_layers; j++) {
             size_t key;
             size_t i;
-            key = sol->d->min_key;
-            for (i = 0; i < num_states; i++) {
-                assert(from_key_s(sol, s, key, j));
-                node_value new_v = negamax_node(sol, s, key, j, 1);
-                assert(new_v.low >= sol->base_nodes[j][i].low);
-                assert(new_v.high <= sol->base_nodes[j][i].high);
-                changed = changed || !equal(sol->base_nodes[j][i], new_v);
-                sol->base_nodes[j][i] = new_v;
-                key = next_key(sol->d, key);
-            }
-            for (i = 0; i < sol->ko_ld->num_keys; i++) {
-                key = sol->ko_ld->keys[i];
-                assert(from_key_ko(sol, s, key, j));
-                node_value new_v = negamax_node(sol, s, key, j, 1);
-                assert(new_v.low >= sol->ko_nodes[j][i].low);
-                assert(new_v.high <= sol->ko_nodes[j][i].high);
-                changed = changed || !equal(sol->ko_nodes[j][i], new_v);
-                sol->ko_nodes[j][i] = new_v;
+            int tid;
+            int num_threads;
+            #pragma omp parallel private(i, key, tid, num_threads)
+            {
+                num_threads = omp_get_num_threads();
+                state s_;
+                state *s = &s_;
+                tid = omp_get_thread_num();
+                key = sol->d->min_key;
+                for (i = 0; i < num_states; i++) {
+                    if (i % num_threads == tid) {
+                        assert(from_key_s(sol, s, key, j));
+                        node_value new_v = negamax_node(sol, s, key, j, 1);
+                        assert(new_v.low >= sol->base_nodes[j][i].low);
+                        assert(new_v.high <= sol->base_nodes[j][i].high);
+                        changed = changed || !equal(sol->base_nodes[j][i], new_v);
+                        sol->base_nodes[j][i] = new_v;
+                    }
+                    key = next_key(sol->d, key);
+                }
+                #pragma omp for
+                for (i = 0; i < sol->ko_ld->num_keys; i++) {
+                    key = sol->ko_ld->keys[i];
+                    assert(from_key_ko(sol, s, key, j));
+                    node_value new_v = negamax_node(sol, s, key, j, 1);
+                    assert(new_v.low >= sol->ko_nodes[j][i].low);
+                    assert(new_v.high <= sol->ko_nodes[j][i].high);
+                    changed = changed || !equal(sol->ko_nodes[j][i], new_v);
+                    sol->ko_nodes[j][i] = new_v;
+                }
             }
         }
         size_t base_layer;
