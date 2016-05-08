@@ -26,27 +26,26 @@ void iterate(solution *sol, char *filename) {
     while (changed) {
         changed = 0;
         for (size_t j = 0; j < sol->num_layers; j++) {
-            size_t key = sol->d->min_key;
-            for (size_t i = 0; i < num_states + sol->ko_ld->num_keys; i++) {
-                if (i < num_states) {
-                    assert(from_key_s(sol, s, key, j));
-                }
-                else {
-                    key = sol->ko_ld->keys[i - num_states];
-                    assert(from_key_ko(sol, s, key, j));
-                }
+            size_t key;
+            size_t i;
+            key = sol->d->min_key;
+            for (i = 0; i < num_states; i++) {
+                assert(from_key_s(sol, s, key, j));
                 node_value new_v = negamax_node(sol, s, key, j, 1);
-                if (i < num_states) {
-                    assert(new_v.low >= sol->base_nodes[j][i].low);
-                    assert(new_v.high <= sol->base_nodes[j][i].high);
-                    changed = changed || !equal(sol->base_nodes[j][i], new_v);
-                    sol->base_nodes[j][i] = new_v;
-                    key = next_key(sol->d, key);
-                }
-                else {
-                    changed = changed || !equal(sol->ko_nodes[j][i - num_states], new_v);
-                    sol->ko_nodes[j][i - num_states] = new_v;
-                }
+                assert(new_v.low >= sol->base_nodes[j][i].low);
+                assert(new_v.high <= sol->base_nodes[j][i].high);
+                changed = changed || !equal(sol->base_nodes[j][i], new_v);
+                sol->base_nodes[j][i] = new_v;
+                key = next_key(sol->d, key);
+            }
+            for (i = 0; i < sol->ko_ld->num_keys; i++) {
+                key = sol->ko_ld->keys[i];
+                assert(from_key_ko(sol, s, key, j));
+                node_value new_v = negamax_node(sol, s, key, j, 1);
+                assert(new_v.low >= sol->ko_nodes[j][i].low);
+                assert(new_v.high <= sol->ko_nodes[j][i].high);
+                changed = changed || !equal(sol->ko_nodes[j][i], new_v);
+                sol->ko_nodes[j][i] = new_v;
             }
         }
         size_t base_layer;
