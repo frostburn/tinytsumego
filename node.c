@@ -13,11 +13,21 @@ typedef struct node_value
     distance_t high_distance;
 } node_value;
 
+typedef struct light_value
+{
+    value_t low;
+    value_t high;
+} light_value;
+
 // This is for the binary interface (no padding)
 #define SIZE_OF_NODE_VALUE (2 * sizeof(value_t) + 2 * sizeof(distance_t))
 
 void print_node(node_value nv) {
     printf("node_value(%d, %d, %d, %d)\n", nv.low, nv.high, nv.low_distance, nv.high_distance);
+}
+
+void print_light(const light_value lv) {
+    printf("light_value(%d, %d)\n", lv.low, lv.high);
 }
 
 node_value negamax(node_value parent, node_value child) {
@@ -66,6 +76,17 @@ node_value negamax(node_value parent, node_value child) {
     return parent;
 }
 
+light_value negamax_light(light_value parent, const light_value child) {
+    if (-child.high > parent.low) {
+        parent.low = -child.high;
+    }
+    if (-child.low > parent.high) {
+        parent.high = -child.low;
+    }
+    assert(parent.low <= parent.high);
+    return parent;
+}
+
 int equal(node_value a, node_value b) {
     if (a.low != b.low) {
         return 0;
@@ -77,4 +98,8 @@ int equal(node_value a, node_value b) {
         return 0;
     }
     return a.high_distance == b.high_distance;
+}
+
+int equal_light(const light_value a, const light_value b) {
+    return a.low == b.low && a.high == b.high;
 }

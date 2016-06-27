@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 char* file_to_buffer(const char *filename) {
     struct stat sb;
     stat(filename, &sb);

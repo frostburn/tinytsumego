@@ -1,5 +1,7 @@
 *.out
 *.dat
+*.ldat
 solver
+solver_light
 query
 stats.txt
