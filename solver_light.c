@@ -5,6 +5,8 @@
 #include <unistd.h>
 // TODO <signal.h> catch Ctrl+C
 
+#include <omp.h>
+
 #define MAIN
 #include "state.c"
 #include "dict.c"
@@ -12,38 +14,46 @@
 #include "solver_common_light.c"
 #include "utils.c"
 
-// gcc -std=gnu99 -Wall -O3 solver_light.c -o solver_light; solver_light 4 3
+// gcc -std=gnu99 -Wall -O3 -fopenmp solver_light.c -o solver_light; solver_light 4 3
 
 void iterate(solution *sol, char *filename) {
-    state s_;
-    state *s = &s_;
-
     size_t num_states = num_keys(sol->d);
 
     int changed = 1;
     while (changed) {
         changed = 0;
         for (size_t j = 0; j < sol->num_layers; j++) {
-            size_t key = sol->d->min_key;
-            for (size_t i = 0; i < num_states + sol->ko_ld->num_keys; i++) {
-                if (i < num_states) {
-                    assert(from_key_s(sol, s, key, j));
-                }
-                else {
-                    key = sol->ko_ld->keys[i - num_states];
-                    assert(from_key_ko(sol, s, key, j));
-                }
-                light_value new_v = negamax_node(sol, s, key, j, 1);
-                if (i < num_states) {
-                    assert(new_v.low >= sol->base_nodes[j][i].low);
-                    assert(new_v.high <= sol->base_nodes[j][i].high);
-                    changed = changed || !equal_light(sol->base_nodes[j][i], new_v);
-                    sol->base_nodes[j][i] = new_v;
+            size_t key;
+            size_t i;
+            int tid;
+            int num_threads;
+            #pragma omp parallel private(i, key, tid, num_threads)
+            {
+                num_threads = omp_get_num_threads();
+                state s_;
+                state *s = &s_;
+                tid = omp_get_thread_num();
+                key = sol->d->min_key;
+                for (i = 0; i < num_states; i++) {
+                    if (i % num_threads == tid) {
+                        assert(from_key_s(sol, s, key, j));
+                        light_value new_v = negamax_node(sol, s, key, j, 1);
+                        assert(new_v.low >= sol->base_nodes[j][i].low);
+                        assert(new_v.high <= sol->base_nodes[j][i].high);
+                        changed = changed || !equal_light(sol->base_nodes[j][i], new_v);
+                        sol->base_nodes[j][i] = new_v;
+                    }
                     key = next_key(sol->d, key);
                 }
-                else {
-                    changed = changed || !equal_light(sol->ko_nodes[j][i - num_states], new_v);
-                    sol->ko_nodes[j][i - num_states] = new_v;
+                #pragma omp for
+                for (i = 0; i < sol->ko_ld->num_keys; i++) {
+                    key = sol->ko_ld->keys[i];
+                    assert(from_key_ko(sol, s, key, j));
+                    light_value new_v = negamax_node(sol, s, key, j, 1);
+                    assert(new_v.low >= sol->ko_nodes[j][i].low);
+                    assert(new_v.high <= sol->ko_nodes[j][i].high);
+                    changed = changed || !equal_light(sol->ko_nodes[j][i], new_v);
+                    sol->ko_nodes[j][i] = new_v;
                 }
             }
         }
@@ -110,9 +120,7 @@ static void parse_args(const int argc, char** argv) {
         else if (argument[1] == 'k') {
             ko_threats = atoi(argument + 2);
         }
-        else if (argument[1] == 'l') {
-            num_layers = atoi(argument + 2);
-        } else {
+        else {
             assert(0);
         }
     }
