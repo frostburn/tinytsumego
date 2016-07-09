@@ -11,7 +11,7 @@ char* file_to_buffer(const char *filename) {
     fclose(f);
     return buffer;
 }
-
+/*
 void* mmalloc(size_t sz, char *filename) {
     int fd = open(filename, O_RDWR | O_CREAT, 0666);
     assert(fd != -1);
@@ -23,3 +23,4 @@ void* mmalloc(size_t sz, char *filename) {
     madvise(map, sz, MADV_RANDOM);
     return map;
 }
+*/

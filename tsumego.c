@@ -423,12 +423,10 @@ edge_14->immortal = edge_14->player;
 
 state corner_4x4_ = (state) {
     rectangle(7, 7),
-    rectangle(7, 7) ^ rectangle(5, 5),
+    rectangle(7, 7) ^ rectangle(6, 6) ^ one(5, 5),
     rectangle(5, 5) ^ rectangle(4, 4),
 };
 state *corner_4x4 = &corner_4x4_;
-// corner_4x4->player ^= two(0,5) | tvo(5, 0);
-corner_4x4->player ^= one(4, 5) | one(5, 4);
 corner_4x4->target = corner_4x4->opponent;
 corner_4x4->immortal = corner_4x4->player;
 
@@ -477,6 +475,20 @@ sscanf_state("9223372036854775807 9205357642611106192 35128545919008 0 0 0 0 0 0
 corner_semeai_4x3->playing_area = rectangle(9, 7);
 corner_semeai_4x3->target = corner_semeai_4x3->opponent | (rectangle(5, 4) ^ rectangle(4, 3));
 corner_semeai_4x3->immortal = corner_semeai_4x3->player ^ (rectangle(5, 4) ^ rectangle(4, 3));
+
+state tanuki_;
+state *tanuki = &tanuki_;
+sscanf_state("9223372036854775807 987640623020284 7891214855684096 0 0 0 0 0 0", tanuki);
+tanuki->playing_area = rectangle(8, 6);
+tanuki->immortal = tanuki->player | tanuki->opponent;
+tanuki->target = two(4, 2) | two(4, 3) | two(4, 4) | tvo(2, 2);
+tanuki->immortal &= ~tanuki->target;
+
+state escape_a_;
+state *escape_a = &escape_a_;
+sscanf_state("9223372036854775807 486279233599 3848290697216 0 0 0 0 0 0", escape_a);
+escape_a->playing_area = rectangle(6, 5);
+escape_a->immortal = escape_a->player | escape_a->opponent;
 
 state ring_5x5_ = (state) {
     rectangle(5, 5) ^ south(east(rectangle(3, 3)))
@@ -527,6 +539,20 @@ state closed_corner_8x2_ = (state) {
 state *closed_corner_8x2 = &closed_corner_8x2_;
 closed_corner_8x2->immortal = closed_corner_8x2->player;
 
+state closed_corner_a_ = (state) {
+    rectangle(8, 5),
+    rectangle(8, 5) ^ (rectangle(6, 2) | rectangle(4, 3) | one(6, 0) | one(0, 3)),
+};
+state *closed_corner_a = &closed_corner_a_;
+closed_corner_a->immortal = closed_corner_a->player;
+
+state closed_corner_b_ = (state) {
+    rectangle(7, 6),
+    rectangle(7, 6) ^ (rectangle(5, 2) | rectangle(3, 4) | one(5, 0) | one(0, 4)),
+};
+state *closed_corner_b = &closed_corner_b_;
+closed_corner_b->immortal = closed_corner_b->player;
+
 const tsumego_info tsumego_infos[] = {
     {"cho1", cho1_4},
     {"cho5", cho5},
@@ -562,6 +588,8 @@ const tsumego_info tsumego_infos[] = {
     {"corner_5x3", corner_5x3},
     {"edge_5x3", edge_5x3},
     {"corner_semeai_4x3", corner_semeai_4x3},
+    {"tanuki", tanuki},
+    {"escape_a", escape_a},
     {"ring_5x5", ring_5x5},
     {"cut_5x4", cut_5x4},
     {"center_4x4", center_4x4},
@@ -570,5 +598,7 @@ const tsumego_info tsumego_infos[] = {
     {"closed_corner_4x4", closed_corner_4x4},
     {"closed_corner_5x3", closed_corner_5x3},
     {"closed_corner_8x2", closed_corner_8x2},
+    {"closed_corner_a", closed_corner_a},
+    {"closed_corner_b", closed_corner_b},
     {NULL, NULL}
 };
