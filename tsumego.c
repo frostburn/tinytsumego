@@ -525,6 +525,13 @@ state closed_corner_4x4_ = (state) {
 state *closed_corner_4x4 = &closed_corner_4x4_;
 closed_corner_4x4->immortal = closed_corner_4x4->player;
 
+state closed_corner_4x4_plus_ = (state) {
+    rectangle(6, 6),
+    rectangle(6, 6) ^ (rectangle(4, 4) | tvo(4, 0) | two(0, 4)),
+};
+state *closed_corner_4x4_plus = &closed_corner_4x4_plus_;
+closed_corner_4x4_plus->immortal = closed_corner_4x4_plus->player;
+
 state closed_corner_5x3_ = (state) {
     rectangle(7, 5),
     rectangle(7, 5) ^ (rectangle(5, 3) | one(5, 0) | one(0, 3)),
@@ -552,6 +559,21 @@ state closed_corner_b_ = (state) {
 };
 state *closed_corner_b = &closed_corner_b_;
 closed_corner_b->immortal = closed_corner_b->player;
+
+state closed_edge_5x3_ = (state) {
+    rectangle(9, 4),
+    rectangle(9, 4) ^ (east(east(rectangle(5, 3))) | tvo(1, 0) | tvo(7, 0)),
+};
+state *closed_edge_5x3 = &closed_edge_5x3_;
+closed_edge_5x3->immortal = closed_edge_5x3->player;
+
+state closed_edge_7_ = (state) {
+    rectangle(7, 4),
+    rectangle(7, 4) ^ (east(rectangle(5, 3)) | tvo(0, 0) | tvo(6, 0)),
+};
+state *closed_edge_7 = &closed_edge_7_;
+closed_edge_7->immortal = closed_edge_7->player;
+
 
 const tsumego_info tsumego_infos[] = {
     {"cho1", cho1_4},
@@ -596,9 +618,12 @@ const tsumego_info tsumego_infos[] = {
     {"target_test", target_test},
     {"nakade_test", nakade_test},
     {"closed_corner_4x4", closed_corner_4x4},
+    {"closed_corner_4x4_plus", closed_corner_4x4_plus},
     {"closed_corner_5x3", closed_corner_5x3},
     {"closed_corner_8x2", closed_corner_8x2},
     {"closed_corner_a", closed_corner_a},
     {"closed_corner_b", closed_corner_b},
+    {"closed_edge_5x3", closed_edge_5x3},
+    {"closed_edge_7", closed_edge_7},
     {NULL, NULL}
 };

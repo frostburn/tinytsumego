@@ -1,6 +1,8 @@
 #define VALUE_MIN (-127)
 #define VALUE_MAX (127)
 #define DISTANCE_MAX (254)
+#define HEURISTIC_MIN (-1e12)
+#define HEURISTIC_MAX (1e12)
 
 typedef signed char value_t;
 typedef unsigned char distance_t;
@@ -19,6 +21,12 @@ typedef struct light_value
     value_t high;
 } light_value;
 
+typedef struct heuristic_value
+{
+    float low;
+    float high;
+} heuristic_value;
+
 // This is for the binary interface (no padding)
 #define SIZE_OF_NODE_VALUE (2 * sizeof(value_t) + 2 * sizeof(distance_t))
 
@@ -28,6 +36,10 @@ void print_node(node_value nv) {
 
 void print_light(const light_value lv) {
     printf("light_value(%d, %d)\n", lv.low, lv.high);
+}
+
+void print_heuristic(const heuristic_value lv) {
+    printf("heuristic_value(%g, %g)\n", lv.low, lv.high);
 }
 
 node_value negamax(node_value parent, node_value child) {
@@ -87,6 +99,17 @@ light_value negamax_light(light_value parent, const light_value child) {
     return parent;
 }
 
+heuristic_value negamax_heuristic(heuristic_value parent, const heuristic_value child) {
+    if (-child.high > parent.low) {
+        parent.low = -child.high;
+    }
+    if (-child.low > parent.high) {
+        parent.high = -child.low;
+    }
+    assert(parent.low <= parent.high);
+    return parent;
+}
+
 int equal(node_value a, node_value b) {
     if (a.low != b.low) {
         return 0;
@@ -101,5 +124,9 @@ int equal(node_value a, node_value b) {
 }
 
 int equal_light(const light_value a, const light_value b) {
+    return a.low == b.low && a.high == b.high;
+}
+
+int equal_heuristic(const heuristic_value a, const heuristic_value b) {
     return a.low == b.low && a.high == b.high;
 }
